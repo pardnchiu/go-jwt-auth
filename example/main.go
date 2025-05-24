@@ -37,8 +37,8 @@ func main() {
 		Domain: "axonews.ai",
 		// 用於 refresh token 時判斷資料庫中會員是否存在來決定是否重簽
 		// 回傳 false 則會取消重簽清除 token
-		CheckUserExists: func(userID string) (bool, error) {
-			return true, nil
+		CheckUserExists: func(userData JWTAuth.AuthData) (bool, error) {
+			return userData.ID == "1", nil
 		},
 	}
 

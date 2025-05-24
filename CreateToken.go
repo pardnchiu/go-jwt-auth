@@ -67,7 +67,7 @@ func (j *JWTAuth) Create(r *http.Request, w http.ResponseWriter, u *AuthData) (*
 
 	return &TokenResult{
 		Token:     accessToken,
-		RefreshID: refreshId,
+		RefreshId: refreshId,
 	}, nil
 }
 
