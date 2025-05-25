@@ -12,7 +12,7 @@ package main
 import (
   "log"
   "time"
-  "github.com/pardnio/golang-jwt-auth"
+  "github.com/pardnltd-tools/golang-jwt-auth"
 )
 
 func main() {
@@ -128,7 +128,7 @@ package main
 
 import (
   "github.com/gin-gonic/gin"
-  "github.com/pardnio/golang-jwt-auth"
+  "github.com/pardnltd-tools/golang-jwt-auth"
 )
 
 func main() {
@@ -168,7 +168,7 @@ package main
 
 import (
   "net/http"
-  "github.com/pardnio/golang-jwt-auth"
+  "github.com/pardnltd-tools/golang-jwt-auth"
 )
 
 func main() {

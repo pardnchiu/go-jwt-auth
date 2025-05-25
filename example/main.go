@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	golangJwtAuth "github.com/pardnio/golang-jwt-auth"
+	golangJwtAuth "github.com/pardnltd-tools/golang-jwt-auth"
 )
 
 func main() {
