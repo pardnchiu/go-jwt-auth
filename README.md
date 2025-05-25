@@ -3,7 +3,7 @@
 A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.
 
 
-[![version](https://img.shields.io/github/v/tag/pardnltd-tools/golang-jwt-auth)](https://github.com/pardnltd-tools/golang-jwt-auth)
+[![version](https://img.shields.io/github/v/tag/pardnltd-tools/golang-jwt-auth)](https://github.com/pardnchiu/golang-jwt-auth)
 
 ## How to use
 
@@ -15,7 +15,7 @@ package main
 import (
   "log"
   "time"
-  "github.com/pardnltd-tools/golang-jwt-auth"
+  "github.com/pardnchiu/golang-jwt-auth"
 )
 
 func main() {
@@ -131,7 +131,7 @@ package main
 
 import (
   "github.com/gin-gonic/gin"
-  "github.com/pardnltd-tools/golang-jwt-auth"
+  "github.com/pardnchiu/golang-jwt-auth"
 )
 
 func main() {
@@ -171,7 +171,7 @@ package main
 
 import (
   "net/http"
-  "github.com/pardnltd-tools/golang-jwt-auth"
+  "github.com/pardnchiu/golang-jwt-auth"
 )
 
 func main() {
