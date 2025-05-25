@@ -23,7 +23,7 @@ func main() {
     RefreshIdExpires:     7 * 24 * time.Hour,
     IsProd:               false,
     Domain:               "localhost",
-    AccessTokenCoolieKey: "access_token",
+    AccessTokenCookieKey: "access_token",
     RefreshIdCookieKey:   "refresh_id",
     Redis: golangJwtAuth.RedisConfig{
       Host:     "localhost",
