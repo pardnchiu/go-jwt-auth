@@ -1,6 +1,9 @@
-# JWT Auth Golang Package
+# JWT Auth (Golang)
 
-A Go JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.
+A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.
+
+
+[![version](https://img.shields.io/github/v/tag/pardnltd-tools/golang-jwt-auth)](https://github.com/pardnltd-tools/golang-jwt-auth)
 
 ## How to use
 
