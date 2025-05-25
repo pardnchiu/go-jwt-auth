@@ -12,11 +12,11 @@ package main
 import (
   "log"
   "time"
-  JWTAuth "github.com/pardnio/golang-jwt-auth"
+  "github.com/pardnio/golang-jwt-auth"
 )
 
 func main() {
-  config := &JWTAuth.Config{
+  config := &golangJwtAuth.Config{
     PrivateKeyPath:       "./keys/private.pem",
     PublicKeyPath:        "./keys/public.pem", 
     AccessTokenExpires:   15 * time.Minute,
@@ -25,19 +25,19 @@ func main() {
     Domain:               "localhost",
     AccessTokenCoolieKey: "access_token",
     RefreshIdCookieKey:   "refresh_id",
-    Redis: JWTAuth.RedisConfig{
+    Redis: golangJwtAuth.RedisConfig{
       Host:     "localhost",
       Port:     6379,
       Password: "",
       DB:       0,
     },
-    CheckUserExists: func(user JWTAuth.AuthData) (bool, error) {
+    CheckUserExists: func(user golangJwtAuth.AuthData) (bool, error) {
       // Implement user existence check logic
       return true, nil
     },
   }
 
-  jwtAuth, err := JWTAuth.New(config)
+  jwtAuth, err := golangJwtAuth.New(config)
   if err != nil {
     log.Fatal("failed to init:", err)
   }
@@ -48,11 +48,11 @@ func main() {
 ### Create()
 
 ```go
-func loginHandler(jwtAuth *auth.JWTAuth) http.HandlerFunc {
+func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
   return func(w http.ResponseWriter, r *http.Request) {
     // After verifying user login info...
     
-    userData := &auth.AuthData{
+    userData := &golangJwtAuth.AuthData{
       ID:        "user123",
       Name:      "John Doe",
       Email:     "john@example.com",
@@ -81,7 +81,7 @@ func loginHandler(jwtAuth *auth.JWTAuth) http.HandlerFunc {
 ### Verify()
 
 ```go
-func protectedHandler(jwtAuth *auth.JWTAuth) http.HandlerFunc {
+func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
   return func(w http.ResponseWriter, r *http.Request) {
     result := jwtAuth.Verify(r, w)
     
@@ -106,7 +106,7 @@ func protectedHandler(jwtAuth *auth.JWTAuth) http.HandlerFunc {
 ### Revoke()
 
 ```go
-func logoutHandler(jwtAuth *auth.JWTAuth) http.HandlerFunc {
+func logoutHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
   return func(w http.ResponseWriter, r *http.Request) {
     err := jwtAuth.Revoke(r, w)
     if err != nil {
@@ -128,7 +128,7 @@ package main
 
 import (
   "github.com/gin-gonic/gin"
-  "your-project/auth"
+  "github.com/pardnio/golang-jwt-auth"
 )
 
 func main() {
@@ -145,7 +145,7 @@ func main() {
   {
     protected.GET("/profile", func(c *gin.Context) {
       // Get user data from Context
-      user, exists := auth.GetAuthDataFromGinContext(c)
+      user, exists := golangJwtAuth.GetAuthDataFromGinContext(c)
       if !exists {
         c.JSON(500, gin.H{"error": "Failed to get user data"})
         return
@@ -168,7 +168,7 @@ package main
 
 import (
   "net/http"
-  "your-project/auth"
+  "github.com/pardnio/golang-jwt-auth"
 )
 
 func main() {
@@ -179,7 +179,7 @@ func main() {
   // Protected route
   mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
     // Get user data from Request Context
-    user, exists := auth.GetAuthDataFromHTTPRequest(r)
+    user, exists := golangJwtAuth.GetAuthDataFromHTTPRequest(r)
     if !exists {
       http.Error(w, "Failed to get user data", http.StatusInternalServerError)
       return
