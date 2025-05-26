@@ -63,10 +63,10 @@ func (j *JWTAuth) Refresh(r *http.Request, w http.ResponseWriter, refreshId, fp 
 	// version > 5
 	// ttl < j.config.RefreshIdExpires / 2
 	if refreshData.Version > 5 || ttl < j.config.RefreshIdExpires/2 {
-		j.redisClient.SetEx(j.context, "refresh:"+refreshId, string(newRefreshDataJson), 30*time.Second)
+		j.redisClient.SetEx(j.context, "refresh:"+refreshId, string(newRefreshDataJson), 5*time.Second)
 		newRefreshId := j.CreateRefreshId(refreshData.Data.ID, refreshData.Data.Name, refreshData.Data.Email, fp)
 
-		newRefreshData["version"] = 1
+		newRefreshData["version"] = 0
 		newRefreshDataJson, err := json.Marshal(newRefreshData)
 		if err != nil {
 			return &AuthResult{
