@@ -57,7 +57,7 @@ func (j *JWTAuth) Verify(r *http.Request, w http.ResponseWriter) *AuthResult {
 		}
 	}
 
-	jwtJson, err := j.parseToken(accessToken, j.Config)
+	jwtJson, err := j.parseToken(accessToken)
 	if err != nil {
 		if strings.Contains(err.Error(), "expired") {
 			token, err := jwt.Parse(accessToken, nil)
@@ -168,7 +168,7 @@ func (j *JWTAuth) getAccessToken(r *http.Request) string {
 }
 
 // * private method
-func (j *JWTAuth) parseToken(tokenString string, config *Config) (jwt.MapClaims, error) {
+func (j *JWTAuth) parseToken(tokenString string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -201,6 +201,7 @@ func (j *JWTAuth) parseToken(tokenString string, config *Config) (jwt.MapClaims,
 	return nil, fmt.Errorf("invalid token")
 }
 
+// * private method
 func (j *JWTAuth) validateJTI(jti string) error {
 	if jti == "" {
 		return fmt.Errorf("missing JWT ID")

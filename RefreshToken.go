@@ -110,7 +110,7 @@ func (j *JWTAuth) Refresh(r *http.Request, w http.ResponseWriter, refreshId stri
 	if refreshData.Version > j.Config.MaxVersion || ttl < time.Duration(float64(j.Config.RefreshIdExpires)*j.Config.RefreshTTL) {
 		j.Redis.SetEx(j.Context, "refresh:"+refreshId, string(newRefreshDataJson), 5*time.Second)
 
-		newRefreshId, err := j.createRefreshId(refreshData.Data.ID, refreshData.Data.Name, refreshData.Data.Email, fp)
+		newRefreshId, err := j.createRefreshId(refreshData.Data.ID, refreshData.Data.Name, refreshData.Data.Email, fp, newJTI)
 		if err != nil {
 			j.Logger.Create(true,
 				"Failed to create New Refresh ID",

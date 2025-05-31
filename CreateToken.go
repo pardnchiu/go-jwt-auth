@@ -16,9 +16,11 @@ func (j *JWTAuth) Create(r *http.Request, w http.ResponseWriter, u *AuthData) (*
 		return nil, fmt.Errorf("Auth data is required")
 	}
 
+	dateNow := time.Now()
+	jwtID := uuid.New().String()
 	fp := j.getFingerprint(r)
 
-	refreshId, err := j.createRefreshId(u.ID, u.Name, u.Email, fp)
+	refreshId, err := j.createRefreshId(u.ID, u.Name, u.Email, fp, jwtID)
 	if err != nil {
 		j.Logger.Create(true,
 			"Failed to create Refresh ID",
@@ -28,8 +30,6 @@ func (j *JWTAuth) Create(r *http.Request, w http.ResponseWriter, u *AuthData) (*
 		return nil, fmt.Errorf("Failed to create Refresh ID: %v", err)
 	}
 
-	dateNow := time.Now()
-	jwtID := uuid.New().String()
 	claims := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
 		"id":         u.ID,
 		"name":       u.Name,

@@ -53,6 +53,15 @@ type AuthData struct {
 	Level     int      `json:"level,omitempty"`
 }
 
+type RefreshID struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Fingerprint string `json:"fp"`
+	IAT         int64  `json:"iat"`
+	JTI         string `json:"jti"`
+}
+
 type RefreshData struct {
 	Data        *AuthData `json:"data,omitempty"`
 	Version     int       `json:"version"`
