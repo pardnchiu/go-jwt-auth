@@ -302,6 +302,107 @@ All main methods return an `AuthResult` struct, including:
 - `Error`: Error message
 - `Data`: User data (on success)
 
+## Flow
+
+
+<details>
+<summary>Create</summary>
+
+```Mermaid
+flowchart TD
+  %% Token Creation Process
+  CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
+  ValidateAuthData -->|Invalid| CreateError[Return Error]
+  ValidateAuthData -->|Valid| GenerateJTI[Generate JTI]
+  GenerateJTI --> GenerateFingerprint[Generate Fingerprint]
+  GenerateFingerprint --> CreateRefreshId[Create Refresh ID]
+  CreateRefreshId --> CreateAccessToken[Create Access Token]
+  CreateAccessToken --> StoreRedisData[Store Redis Data]
+  StoreRedisData --> SetTokenCookies[Set Token Cookies]
+  SetTokenCookies --> CreateSuccess[Creation Success]
+```
+
+</details>
+
+<details>
+<summary>Refresh</summary>
+
+```Mermaid
+flowchart TD
+  Start([Request Start]) --> Auth{Has Access Token?}
+  
+  Auth -->|Yes| CheckRevoke[Check Token Revocation]
+  Auth -->|No| HasRefresh{Has Refresh ID?}
+  
+  HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
+  HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
+  
+  CheckRevoke --> IsRevoked{Token Revoked?}
+  IsRevoked -->|Yes| Unauthorized
+  IsRevoked -->|No| ParseToken[Parse Access Token]
+  
+  ParseToken --> TokenValid{Token Valid?}
+  TokenValid -->|Yes| ValidateJTI[Validate JTI]
+  TokenValid -->|No| IsExpired{Token Expired?}
+  
+  IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
+  IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
+  
+  ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
+  ValidateExpiredClaims --> RefreshFlow[Enter Refresh Flow]
+  
+  ValidateJTI --> JTIValid{JTI Valid?}
+  JTIValid -->|No| Unauthorized
+  JTIValid -->|Yes| ValidateClaims[Validate Claims]
+  
+  ValidateClaims --> ClaimsValid{Claims Match?}
+  ClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
+  ClaimsValid -->|Yes| Success[Return 200 Success]
+  
+  ValidateRefresh --> RefreshValid{Refresh ID Valid?}
+  RefreshValid -->|No| Unauthorized
+  RefreshValid -->|Yes| RefreshFlow
+  
+  RefreshFlow --> AcquireLock[Acquire Refresh Lock]
+  AcquireLock --> LockSuccess{Lock Acquired?}
+  LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
+  LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
+  
+  GetRefreshData --> CheckTTL[Check TTL]
+  CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
+  
+  NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
+  NeedNewRefresh -->|No| UpdateVersion[Update Version]
+  
+  CreateNewRefresh --> SetNewRefreshData[Set New Refresh Data]
+  UpdateVersion --> SetNewRefreshData
+  
+  SetNewRefreshData --> CheckUserExists{Check User Exists}
+  CheckUserExists -->|No| Unauthorized
+  CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
+  
+  GenerateNewToken --> StoreJTI[Store New JTI]
+  StoreJTI --> SetCookies[Set Cookies]
+  SetCookies --> ReleaseLock[Release Lock]
+  ReleaseLock --> RefreshSuccess[Return Refresh Success]
+```
+
+</details>
+
+<details>
+<summary>Revoke</summary>
+
+```Mermaid
+flowchart TD
+  %% Revocation Process
+  RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
+  ClearCookies --> GetTokens[Get Token Info]
+  GetTokens --> SetRevokeFlag[Set Revocation Flag]
+  SetRevokeFlag --> RevokeSuccess[Revocation Success]
+```
+
+</details>
+
 ## License
 
 This source code project is licensed under the [MIT](https://github.com/pardnchiu/FlexPlyr/blob/main/LICENSE) license.
