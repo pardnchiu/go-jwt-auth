@@ -301,3 +301,23 @@ All main methods return an `AuthResult` struct, including:
 - `StatusCode`: HTTP status code
 - `Error`: Error message
 - `Data`: User data (on success)
+
+## License
+
+This source code project is licensed under the [MIT](https://github.com/pardnchiu/FlexPlyr/blob/main/LICENSE) license.
+
+## Creator
+
+<img src="https://avatars.githubusercontent.com/u/25631760" align="left" width="96" height="96" style="margin-right: 0.5rem;">
+
+<h4 style="padding-top: 0">邱敬幃 Pardn Chiu</h4>
+
+<a href="mailto:dev@pardn.io" target="_blank">
+    <img src="https://pardn.io/image/email.svg" width="48" height="48">
+</a> <a href="https://linkedin.com/in/pardnchiu" target="_blank">
+    <img src="https://pardn.io/image/linkedin.svg" width="48" height="48">
+</a>
+
+***
+
+©️ 2025 [邱敬幃 Pardn Chiu](https://pardn.io)
