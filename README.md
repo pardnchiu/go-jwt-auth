@@ -342,22 +342,24 @@ flowchart TD
   IsRevoked -->|No| ParseToken[Parse Access Token]
   
   ParseToken --> TokenValid{Token Valid?}
-  TokenValid -->|Yes| ValidateJTI[Validate JTI]
+  TokenValid -->|Yes| ValidateClaims[Validate Claims]
   TokenValid -->|No| IsExpired{Token Expired?}
   
   IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
   IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
   
   ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
-  ValidateExpiredClaims --> RefreshFlow[Enter Refresh Flow]
-  
-  ValidateJTI --> JTIValid{JTI Valid?}
-  JTIValid -->|No| Unauthorized
-  JTIValid -->|Yes| ValidateClaims[Validate Claims]
+  ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID & Fingerprint Match?}
+  ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
+  ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
   
   ValidateClaims --> ClaimsValid{Claims Match?}
-  ClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
-  ClaimsValid -->|Yes| Success[Return 200 Success]
+  ClaimsValid -->|No| InvalidClaims
+  ClaimsValid -->|Yes| CheckJTI[Check JTI]
+  
+  CheckJTI --> JTIValid{JTI Valid?}
+  JTIValid -->|No| Unauthorized
+  JTIValid -->|Yes| Success[Return 200 Success]
   
   ValidateRefresh --> RefreshValid{Refresh ID Valid?}
   RefreshValid -->|No| Unauthorized
@@ -374,10 +376,11 @@ flowchart TD
   NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
   NeedNewRefresh -->|No| UpdateVersion[Update Version]
   
-  CreateNewRefresh --> SetNewRefreshData[Set New Refresh Data]
+  CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5s]
+  SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
   UpdateVersion --> SetNewRefreshData
   
-  SetNewRefreshData --> CheckUserExists{Check User Exists}
+  SetNewRefreshData --> CheckUserExists{User Exists Check}
   CheckUserExists -->|No| Unauthorized
   CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
   
@@ -396,8 +399,17 @@ flowchart TD
 flowchart TD
   RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
   ClearCookies --> GetTokens[Get Token Info]
-  GetTokens --> SetRevokeFlag[Set Revocation Flag]
-  SetRevokeFlag --> RevokeSuccess[Revocation Success]
+  GetTokens --> HasRefreshId{Has Refresh ID?}
+  HasRefreshId -->|No| RevokeSuccess[Revocation Success]
+  HasRefreshId -->|Yes| GetRefreshData2[Get Refresh Data from Redis]
+  GetRefreshData2 --> RefreshExists{Refresh Data Exists?}
+  RefreshExists -->|No| RevokeSuccess
+  RefreshExists -->|Yes| SetOldRefreshExpire2[Set Refresh ID to Expire in 5s]
+  SetOldRefreshExpire2 --> CheckAccessTTL[Check Access Token TTL]
+  CheckAccessTTL --> TTLValid{TTL > 0?}
+  TTLValid -->|No| RevokeSuccess
+  TTLValid -->|Yes| AddToRevokeList[Add Access Token to Revoke List]
+  AddToRevokeList --> RevokeSuccess
 ```
 
 </details>
