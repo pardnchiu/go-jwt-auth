@@ -308,7 +308,7 @@ All main methods return an `AuthResult` struct, including:
 <details>
 <summary>Create</summary>
 
-```Mermaid
+```mermaid
 flowchart TD
   %% Token Creation Process
   CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
@@ -327,7 +327,7 @@ flowchart TD
 <details>
 <summary>Refresh</summary>
 
-```Mermaid
+```mermaid
 flowchart TD
   Start([Request Start]) --> Auth{Has Access Token?}
   
@@ -392,9 +392,8 @@ flowchart TD
 <details>
 <summary>Revoke</summary>
 
-```Mermaid
+```mermaid
 flowchart TD
-  %% Revocation Process
   RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
   ClearCookies --> GetTokens[Get Token Info]
   GetTokens --> SetRevokeFlag[Set Revocation Flag]
