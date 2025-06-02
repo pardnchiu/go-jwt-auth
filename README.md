@@ -42,6 +42,7 @@
   ```bash
   go get github.com/pardnchiu/golang-jwt-auth
   ```
+
 - ### Initialize
   ```go
   package main
@@ -56,34 +57,18 @@
   func main() {
     config := &golangJwtAuth.Config{
       PrivateKeyPath:       "./keys/private.pem",
-      PublicKeyPath:        "./keys/public.pem", 
-      // Or provide keys directly:
-      // PrivateKey:           "-----BEGIN EC PRIVATE KEY-----...",
-      // PublicKey:            "-----BEGIN PUBLIC KEY-----...",
+      PublicKeyPath:        "./keys/public.pem",
       AccessTokenExpires:   15 * time.Minute,
       RefreshIdExpires:     7 * 24 * time.Hour,
-      // true: domain=Domain, samesite=none, secure=true
-      // false: domain=localhost, samesite=lax, secure=false
       IsProd:               false,
       Domain:               "pardn.io",
-      // Cookie key names, defaults to access_token/refresh_id
-      AccessTokenCookieKey: "access_token",
-      RefreshIdCookieKey:   "refresh_id",
-      // Redis storage configuration
       Redis: golangJwtAuth.RedisConfig{
-        Host:     "localhost",
-        Port:     6379,
-        Password: "",
-        DB:       0,
+        Host: "localhost",
+        Port: 6379,
       },
       CheckUserExists: func(user golangJwtAuth.AuthData) (bool, error) {
-        // Return true if user exists, false otherwise
         return true, nil
       },
-      // Maximum version threshold, default 5
-      MaxVersion: 5,
-      // TTL threshold, default 0.5
-      RefreshTTL: 0.5
     }
 
     jwtAuth, err := golangJwtAuth.New(config)
@@ -95,6 +80,24 @@
   ```
 
 ### Create()
+
+<details>
+<summary>Flow</summary>
+
+```mermaid
+flowchart TD
+  CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
+  ValidateAuthData -->|Invalid| CreateError[Return Error]
+  ValidateAuthData -->|Valid| GenerateJTI[Generate JTI]
+  GenerateJTI --> GenerateFingerprint[Generate Fingerprint]
+  GenerateFingerprint --> CreateRefreshId[Create Refresh ID]
+  CreateRefreshId --> CreateAccessToken[Create Access Token]
+  CreateAccessToken --> StoreRedisData[Store Redis Data]
+  StoreRedisData --> SetTokenCookies[Set Token Cookies]
+  SetTokenCookies --> CreateSuccess[Creation Success]
+```
+
+</details>
 
 ```go
 func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
@@ -129,6 +132,74 @@ func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
 
 ### Verify()
 
+<details>
+<summary>Flow</summary>
+
+```mermaid
+flowchart TD
+  Start([Request Start]) --> Auth{Has Access Token?}
+  
+  Auth -->|Yes| CheckRevoke[Check Token Revocation]
+  Auth -->|No| HasRefresh{Has Refresh ID?}
+  
+  HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
+  HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
+  
+  CheckRevoke --> IsRevoked{Token Revoked?}
+  IsRevoked -->|Yes| Unauthorized
+  IsRevoked -->|No| ParseToken[Parse Access Token]
+  
+  ParseToken --> TokenValid{Token Valid?}
+  TokenValid -->|Yes| ValidateClaims[Validate Claims]
+  TokenValid -->|No| IsExpired{Token Expired?}
+  
+  IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
+  IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
+  
+  ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
+  ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID & Fingerprint Match?}
+  ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
+  ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
+  
+  ValidateClaims --> ClaimsValid{Claims Match?}
+  ClaimsValid -->|No| InvalidClaims
+  ClaimsValid -->|Yes| CheckJTI[Check JTI]
+  
+  CheckJTI --> JTIValid{JTI Valid?}
+  JTIValid -->|No| Unauthorized
+  JTIValid -->|Yes| Success[Return 200 Success]
+  
+  ValidateRefresh --> RefreshValid{Refresh ID Valid?}
+  RefreshValid -->|No| Unauthorized
+  RefreshValid -->|Yes| RefreshFlow
+  
+  RefreshFlow --> AcquireLock[Acquire Refresh Lock]
+  AcquireLock --> LockSuccess{Lock Acquired?}
+  LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
+  LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
+  
+  GetRefreshData --> CheckTTL[Check TTL]
+  CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
+  
+  NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
+  NeedNewRefresh -->|No| UpdateVersion[Update Version]
+  
+  CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5s]
+  SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
+  UpdateVersion --> SetNewRefreshData
+  
+  SetNewRefreshData --> CheckUserExists{User Exists Check}
+  CheckUserExists -->|No| Unauthorized
+  CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
+  
+  GenerateNewToken --> StoreJTI[Store New JTI]
+  StoreJTI --> SetCookies[Set Cookies]
+  SetCookies --> ReleaseLock[Release Lock]
+  ReleaseLock --> RefreshSuccess[Return Refresh Success]
+```
+
+</details>
+
 ```go
 func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
   return func(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +224,28 @@ func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
 ```
 
 ### Revoke()
+
+<details>
+<summary>Flow</summary>
+
+```mermaid
+flowchart TD
+  RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
+  ClearCookies --> GetTokens[Get Token Info]
+  GetTokens --> HasRefreshId{Has Refresh ID?}
+  HasRefreshId -->|No| RevokeSuccess[Revocation Success]
+  HasRefreshId -->|Yes| GetRefreshData2[Get Refresh Data from Redis]
+  GetRefreshData2 --> RefreshExists{Refresh Data Exists?}
+  RefreshExists -->|No| RevokeSuccess
+  RefreshExists -->|Yes| SetOldRefreshExpire2[Set Refresh ID to Expire in 5s]
+  SetOldRefreshExpire2 --> CheckAccessTTL[Check Access Token TTL]
+  CheckAccessTTL --> TTLValid{TTL > 0?}
+  TTLValid -->|No| RevokeSuccess
+  TTLValid -->|Yes| AddToRevokeList[Add Access Token to Revoke List]
+  AddToRevokeList --> RevokeSuccess
+```
+
+</details>
 
 ```go
 func logoutHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
@@ -251,7 +344,7 @@ func main() {
 
 ## Configuration
 
-### Config
+### Config Parameters
 - `PrivateKeyPath` / `PrivateKey`: private key file path or content
 - `PublicKeyPath` / `PublicKey`: public key file path or content  
 - `AccessTokenExpires`: access token expire time
@@ -270,7 +363,7 @@ func main() {
 - `RefreshTTL`: TTL threshold (default: 0.5)
 - `LogPath`: Custom log path (default: './logs/golangJWTAuth')
 
-### Supported methods
+### Supported Authentication Methods
 
 1. **Cookie**: Automatically reads token from cookie
 2. **Authorization Header**: `Authorization: Bearer <token>`
@@ -279,7 +372,7 @@ func main() {
    - `X-Refresh-ID`: Custom Refresh ID
    - `X-Device-ID`: Device ID
 
-## Token refresh
+### Token Refresh Response
 
 The new tokens are returned via:
 - HTTP Header: `X-New-Access-Token`
@@ -301,118 +394,6 @@ All main methods return an `AuthResult` struct, including:
 - `StatusCode`: HTTP status code
 - `Error`: Error message
 - `Data`: User data (on success)
-
-## Flow
-
-
-<details>
-<summary>Create</summary>
-
-```mermaid
-flowchart TD
-  %% Token Creation Process
-  CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
-  ValidateAuthData -->|Invalid| CreateError[Return Error]
-  ValidateAuthData -->|Valid| GenerateJTI[Generate JTI]
-  GenerateJTI --> GenerateFingerprint[Generate Fingerprint]
-  GenerateFingerprint --> CreateRefreshId[Create Refresh ID]
-  CreateRefreshId --> CreateAccessToken[Create Access Token]
-  CreateAccessToken --> StoreRedisData[Store Redis Data]
-  StoreRedisData --> SetTokenCookies[Set Token Cookies]
-  SetTokenCookies --> CreateSuccess[Creation Success]
-```
-
-</details>
-
-<details>
-<summary>Refresh</summary>
-
-```mermaid
-flowchart TD
-  Start([Request Start]) --> Auth{Has Access Token?}
-  
-  Auth -->|Yes| CheckRevoke[Check Token Revocation]
-  Auth -->|No| HasRefresh{Has Refresh ID?}
-  
-  HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
-  HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
-  
-  CheckRevoke --> IsRevoked{Token Revoked?}
-  IsRevoked -->|Yes| Unauthorized
-  IsRevoked -->|No| ParseToken[Parse Access Token]
-  
-  ParseToken --> TokenValid{Token Valid?}
-  TokenValid -->|Yes| ValidateClaims[Validate Claims]
-  TokenValid -->|No| IsExpired{Token Expired?}
-  
-  IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
-  IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
-  
-  ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
-  ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID & Fingerprint Match?}
-  ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
-  ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
-  
-  ValidateClaims --> ClaimsValid{Claims Match?}
-  ClaimsValid -->|No| InvalidClaims
-  ClaimsValid -->|Yes| CheckJTI[Check JTI]
-  
-  CheckJTI --> JTIValid{JTI Valid?}
-  JTIValid -->|No| Unauthorized
-  JTIValid -->|Yes| Success[Return 200 Success]
-  
-  ValidateRefresh --> RefreshValid{Refresh ID Valid?}
-  RefreshValid -->|No| Unauthorized
-  RefreshValid -->|Yes| RefreshFlow
-  
-  RefreshFlow --> AcquireLock[Acquire Refresh Lock]
-  AcquireLock --> LockSuccess{Lock Acquired?}
-  LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
-  LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
-  
-  GetRefreshData --> CheckTTL[Check TTL]
-  CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
-  
-  NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
-  NeedNewRefresh -->|No| UpdateVersion[Update Version]
-  
-  CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5s]
-  SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
-  UpdateVersion --> SetNewRefreshData
-  
-  SetNewRefreshData --> CheckUserExists{User Exists Check}
-  CheckUserExists -->|No| Unauthorized
-  CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
-  
-  GenerateNewToken --> StoreJTI[Store New JTI]
-  StoreJTI --> SetCookies[Set Cookies]
-  SetCookies --> ReleaseLock[Release Lock]
-  ReleaseLock --> RefreshSuccess[Return Refresh Success]
-```
-
-</details>
-
-<details>
-<summary>Revoke</summary>
-
-```mermaid
-flowchart TD
-  RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
-  ClearCookies --> GetTokens[Get Token Info]
-  GetTokens --> HasRefreshId{Has Refresh ID?}
-  HasRefreshId -->|No| RevokeSuccess[Revocation Success]
-  HasRefreshId -->|Yes| GetRefreshData2[Get Refresh Data from Redis]
-  GetRefreshData2 --> RefreshExists{Refresh Data Exists?}
-  RefreshExists -->|No| RevokeSuccess
-  RefreshExists -->|Yes| SetOldRefreshExpire2[Set Refresh ID to Expire in 5s]
-  SetOldRefreshExpire2 --> CheckAccessTTL[Check Access Token TTL]
-  CheckAccessTTL --> TTLValid{TTL > 0?}
-  TTLValid -->|No| RevokeSuccess
-  TTLValid -->|Yes| AddToRevokeList[Add Access Token to Revoke List]
-  AddToRevokeList --> RevokeSuccess
-```
-
-</details>
 
 ## License
 
