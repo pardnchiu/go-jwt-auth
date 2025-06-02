@@ -79,268 +79,260 @@
   }
   ```
 
-### Create()
+- ### Create
+  <details>
+  <summary>Flow</summary>
+  
+  ```mermaid
+  flowchart TD
+    CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
+    ValidateAuthData -->|Invalid| CreateError[Return Error]
+    ValidateAuthData -->|Valid| GenerateJTI[Generate JTI]
+    GenerateJTI --> GenerateFingerprint[Generate Fingerprint]
+    GenerateFingerprint --> CreateRefreshId[Create Refresh ID]
+    CreateRefreshId --> CreateAccessToken[Create Access Token]
+    CreateAccessToken --> StoreRedisData[Store Redis Data]
+    StoreRedisData --> SetTokenCookies[Set Token Cookies]
+    SetTokenCookies --> CreateSuccess[Creation Success]
+  ```
+  
+  </details>
 
-<details>
-<summary>Flow</summary>
 
-```mermaid
-flowchart TD
-  CreateStart([Create Token Request]) --> ValidateAuthData{Validate User Data}
-  ValidateAuthData -->|Invalid| CreateError[Return Error]
-  ValidateAuthData -->|Valid| GenerateJTI[Generate JTI]
-  GenerateJTI --> GenerateFingerprint[Generate Fingerprint]
-  GenerateFingerprint --> CreateRefreshId[Create Refresh ID]
-  CreateRefreshId --> CreateAccessToken[Create Access Token]
-  CreateAccessToken --> StoreRedisData[Store Redis Data]
-  StoreRedisData --> SetTokenCookies[Set Token Cookies]
-  SetTokenCookies --> CreateSuccess[Creation Success]
-```
-
-</details>
-
-```go
-func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-  return func(w http.ResponseWriter, r *http.Request) {
-    // after verifying user login info...
-    
-    userData := &golangJwtAuth.AuthData{
-      ID:        "user123",
-      Name:      "John Doe",
-      Email:     "john@example.com",
-      Thumbnail: "avatar.jpg",
-      Role:      "user",
-      Level:     1,
-      Scope:     []string{"read", "write"},
-    }
-
-    tokenResult, err := jwtAuth.Create(r, w, userData)
-    if err != nil {
-      http.Error(w, err.Error(), http.StatusInternalServerError)
-      return
-    }
-
-    // automatically set in cookies
-    json.NewEncoder(w).Encode(map[string]interface{}{
-      "success":    true,
-      "token":      tokenResult.Token,
-      "refresh_id": tokenResult.RefreshId,
-    })
-  }
-}
-```
-
-### Verify()
-
-<details>
-<summary>Flow</summary>
-
-```mermaid
-flowchart TD
-  Start([Request Start]) --> Auth{Has Access Token?}
+  ```go
+  func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+      // after verifying user login info...
+      
+      userData := &golangJwtAuth.AuthData{
+        ID:        "user123",
+        Name:      "John Doe",
+        Email:     "john@example.com",
+        Thumbnail: "avatar.jpg",
+        Role:      "user",
+        Level:     1,
+        Scope:     []string{"read", "write"},
+      }
   
-  Auth -->|Yes| CheckRevoke[Check Token Revocation]
-  Auth -->|No| HasRefresh{Has Refresh ID?}
+      tokenResult, err := jwtAuth.Create(r, w, userData)
+      if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+      }
   
-  HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
-  HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
-  
-  CheckRevoke --> IsRevoked{Token Revoked?}
-  IsRevoked -->|Yes| Unauthorized
-  IsRevoked -->|No| ParseToken[Parse Access Token]
-  
-  ParseToken --> TokenValid{Token Valid?}
-  TokenValid -->|Yes| ValidateClaims[Validate Claims]
-  TokenValid -->|No| IsExpired{Token Expired?}
-  
-  IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
-  IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
-  
-  ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
-  ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID & Fingerprint Match?}
-  ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
-  ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
-  
-  ValidateClaims --> ClaimsValid{Claims Match?}
-  ClaimsValid -->|No| InvalidClaims
-  ClaimsValid -->|Yes| CheckJTI[Check JTI]
-  
-  CheckJTI --> JTIValid{JTI Valid?}
-  JTIValid -->|No| Unauthorized
-  JTIValid -->|Yes| Success[Return 200 Success]
-  
-  ValidateRefresh --> RefreshValid{Refresh ID Valid?}
-  RefreshValid -->|No| Unauthorized
-  RefreshValid -->|Yes| RefreshFlow
-  
-  RefreshFlow --> AcquireLock[Acquire Refresh Lock]
-  AcquireLock --> LockSuccess{Lock Acquired?}
-  LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
-  LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
-  
-  GetRefreshData --> CheckTTL[Check TTL]
-  CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
-  
-  NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
-  NeedNewRefresh -->|No| UpdateVersion[Update Version]
-  
-  CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5s]
-  SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
-  UpdateVersion --> SetNewRefreshData
-  
-  SetNewRefreshData --> CheckUserExists{User Exists Check}
-  CheckUserExists -->|No| Unauthorized
-  CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
-  
-  GenerateNewToken --> StoreJTI[Store New JTI]
-  StoreJTI --> SetCookies[Set Cookies]
-  SetCookies --> ReleaseLock[Release Lock]
-  ReleaseLock --> RefreshSuccess[Return Refresh Success]
-```
-
-</details>
-
-```go
-func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-  return func(w http.ResponseWriter, r *http.Request) {
-    result := jwtAuth.Verify(r, w)
-    
-    if !result.Success {
-      w.WriteHeader(result.StatusCode)
-      json.NewEncoder(w).Encode(map[string]string{
-        "error": result.Error,
+      // automatically set in cookies
+      json.NewEncoder(w).Encode(map[string]interface{}{
+        "success":    true,
+        "token":      tokenResult.Token,
+        "refresh_id": tokenResult.RefreshId,
       })
-      return
     }
-
-    // Use the authenticated user data
-    user := result.Data
-    json.NewEncoder(w).Encode(map[string]interface{}{
-      "message": "Protected resource accessed",
-      "user":    user,
-    })
   }
-}
-```
+  ```
+- ### Verify
+  <details>
+  <summary>Flow</summary>
+  
+  ```mermaid
+  flowchart TD
+    Start([Request Start]) --> Auth{Has Access Token?}
+    
+    Auth -->|Yes| CheckRevoke[Check Token Revocation]
+    Auth -->|No| HasRefresh{Has Refresh ID?}
+    
+    HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
+    HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
+    
+    CheckRevoke --> IsRevoked{Token Revoked?}
+    IsRevoked -->|Yes| Unauthorized
+    IsRevoked -->|No| ParseToken[Parse Access Token]
+    
+    ParseToken --> TokenValid{Token Valid?}
+    TokenValid -->|Yes| ValidateClaims[Validate Claims]
+    TokenValid -->|No| IsExpired{Token Expired?}
+    
+    IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
+    IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
+    
+    ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
+    ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID & Fingerprint Match?}
+    ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
+    ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
+    
+    ValidateClaims --> ClaimsValid{Claims Match?}
+    ClaimsValid -->|No| InvalidClaims
+    ClaimsValid -->|Yes| CheckJTI[Check JTI]
+    
+    CheckJTI --> JTIValid{JTI Valid?}
+    JTIValid -->|No| Unauthorized
+    JTIValid -->|Yes| Success[Return 200 Success]
+    
+    ValidateRefresh --> RefreshValid{Refresh ID Valid?}
+    RefreshValid -->|No| Unauthorized
+    RefreshValid -->|Yes| RefreshFlow
+    
+    RefreshFlow --> AcquireLock[Acquire Refresh Lock]
+    AcquireLock --> LockSuccess{Lock Acquired?}
+    LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
+    LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
+    
+    GetRefreshData --> CheckTTL[Check TTL]
+    CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
+    
+    NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
+    NeedNewRefresh -->|No| UpdateVersion[Update Version]
+    
+    CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5s]
+    SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
+    UpdateVersion --> SetNewRefreshData
+    
+    SetNewRefreshData --> CheckUserExists{User Exists Check}
+    CheckUserExists -->|No| Unauthorized
+    CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
+    
+    GenerateNewToken --> StoreJTI[Store New JTI]
+    StoreJTI --> SetCookies[Set Cookies]
+    SetCookies --> ReleaseLock[Release Lock]
+    ReleaseLock --> RefreshSuccess[Return Refresh Success]
+  ```
+  
+  </details>
 
-### Revoke()
-
-<details>
-<summary>Flow</summary>
-
-```mermaid
-flowchart TD
-  RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
-  ClearCookies --> GetTokens[Get Token Info]
-  GetTokens --> HasRefreshId{Has Refresh ID?}
-  HasRefreshId -->|No| RevokeSuccess[Revocation Success]
-  HasRefreshId -->|Yes| GetRefreshData2[Get Refresh Data from Redis]
-  GetRefreshData2 --> RefreshExists{Refresh Data Exists?}
-  RefreshExists -->|No| RevokeSuccess
-  RefreshExists -->|Yes| SetOldRefreshExpire2[Set Refresh ID to Expire in 5s]
-  SetOldRefreshExpire2 --> CheckAccessTTL[Check Access Token TTL]
-  CheckAccessTTL --> TTLValid{TTL > 0?}
-  TTLValid -->|No| RevokeSuccess
-  TTLValid -->|Yes| AddToRevokeList[Add Access Token to Revoke List]
-  AddToRevokeList --> RevokeSuccess
-```
-
-</details>
-
-```go
-func logoutHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-  return func(w http.ResponseWriter, r *http.Request) {
-    err := jwtAuth.Revoke(r, w)
-    if err != nil {
-      http.Error(w, err.Error(), http.StatusInternalServerError)
-      return
+  ```go
+  func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+      result := jwtAuth.Verify(r, w)
+      
+      if !result.Success {
+        w.WriteHeader(result.StatusCode)
+        json.NewEncoder(w).Encode(map[string]string{
+          "error": result.Error,
+        })
+        return
+      }
+  
+      // Use the authenticated user data
+      user := result.Data
+      json.NewEncoder(w).Encode(map[string]interface{}{
+        "message": "Protected resource accessed",
+        "user":    user,
+      })
     }
-
-    json.NewEncoder(w).Encode(map[string]string{
-      "message": "Successfully logged out",
-    })
   }
-}
-```
-
-### GinMiddleware
-
-```go
-package main
-
-import (
-  "github.com/gin-gonic/gin"
-  "github.com/pardnchiu/golang-jwt-auth"
-)
-
-func main() {
-  // Initialize jwtAuth...
+  ```
+- ### Revoke
+  <details>
+  <summary>Flow</summary>
   
-  r := gin.Default()
+  ```mermaid
+  flowchart TD
+    RevokeStart([Revoke Request]) --> ClearCookies[Clear Cookies]
+    ClearCookies --> GetTokens[Get Token Info]
+    GetTokens --> HasRefreshId{Has Refresh ID?}
+    HasRefreshId -->|No| RevokeSuccess[Revocation Success]
+    HasRefreshId -->|Yes| GetRefreshData2[Get Refresh Data from Redis]
+    GetRefreshData2 --> RefreshExists{Refresh Data Exists?}
+    RefreshExists -->|No| RevokeSuccess
+    RefreshExists -->|Yes| SetOldRefreshExpire2[Set Refresh ID to Expire in 5s]
+    SetOldRefreshExpire2 --> CheckAccessTTL[Check Access Token TTL]
+    CheckAccessTTL --> TTLValid{TTL > 0?}
+    TTLValid -->|No| RevokeSuccess
+    TTLValid -->|Yes| AddToRevokeList[Add Access Token to Revoke List]
+    AddToRevokeList --> RevokeSuccess
+  ```
   
-  // Apply as a global middleware
-  r.Use(jwtAuth.GinMiddleware())
+  </details>
+
+  ```go
+  func logoutHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+      err := jwtAuth.Revoke(r, w)
+      if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+      }
   
-  // Or apply to specific route groups
-  protected := r.Group("/api/protected")
-  protected.Use(jwtAuth.GinMiddleware())
-  {
-    protected.GET("/profile", func(c *gin.Context) {
-      // Get user data from Context
-      user, exists := golangJwtAuth.GetAuthDataFromGinContext(c)
+      json.NewEncoder(w).Encode(map[string]string{
+        "message": "Successfully logged out",
+      })
+    }
+  }
+  ```
+- ### GinMiddleware
+  ```go
+  package main
+  
+  import (
+    "github.com/gin-gonic/gin"
+    "github.com/pardnchiu/golang-jwt-auth"
+  )
+  
+  func main() {
+    // Initialize jwtAuth...
+    
+    r := gin.Default()
+    
+    // Apply as a global middleware
+    r.Use(jwtAuth.GinMiddleware())
+    
+    // Or apply to specific route groups
+    protected := r.Group("/api/protected")
+    protected.Use(jwtAuth.GinMiddleware())
+    {
+      protected.GET("/profile", func(c *gin.Context) {
+        // Get user data from Context
+        user, exists := golangJwtAuth.GetAuthDataFromGinContext(c)
+        if !exists {
+          c.JSON(500, gin.H{"error": "Failed to get user data"})
+          return
+        }
+        
+        c.JSON(200, gin.H{
+          "user": user,
+        })
+      })
+    }
+    
+    r.Run(":8080")
+  }
+  ```
+- ### HTTPMiddleware
+  ```go
+  package main
+  
+  import (
+    "net/http"
+    "github.com/pardnchiu/golang-jwt-auth"
+  )
+  
+  func main() {
+    // Initialize jwtAuth...
+    
+    mux := http.NewServeMux()
+    
+    // Protected route
+    mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
+      // Get user data from Request Context
+      user, exists := golangJwtAuth.GetAuthDataFromHTTPRequest(r)
       if !exists {
-        c.JSON(500, gin.H{"error": "Failed to get user data"})
+        http.Error(w, "Failed to get user data", http.StatusInternalServerError)
         return
       }
       
-      c.JSON(200, gin.H{
+      json.NewEncoder(w).Encode(map[string]interface{}{
         "user": user,
       })
     })
-  }
-  
-  r.Run(":8080")
-}
-```
-
-### HTTPMiddleware
-
-```go
-package main
-
-import (
-  "net/http"
-  "github.com/pardnchiu/golang-jwt-auth"
-)
-
-func main() {
-  // Initialize jwtAuth...
-  
-  mux := http.NewServeMux()
-  
-  // Protected route
-  mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
-    // Get user data from Request Context
-    user, exists := golangJwtAuth.GetAuthDataFromHTTPRequest(r)
-    if !exists {
-      http.Error(w, "Failed to get user data", http.StatusInternalServerError)
-      return
+    
+    // Apply middleware
+    server := &http.Server{
+      Addr:    ":8080",
+      Handler: jwtAuth.HTTPMiddleware(mux),
     }
     
-    json.NewEncoder(w).Encode(map[string]interface{}{
-      "user": user,
-    })
-  })
-  
-  // Apply middleware
-  server := &http.Server{
-    Addr:    ":8080",
-    Handler: jwtAuth.HTTPMiddleware(mux),
+    server.ListenAndServe()
   }
-  
-  server.ListenAndServe()
-}
-```
+  ```
 
 ## Configuration
 
