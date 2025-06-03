@@ -11,30 +11,6 @@ import (
 	"time"
 )
 
-type LogLevel int
-
-const (
-	DEBUG LogLevel = iota
-	TRACE
-	INFO
-	NOTICE
-	WARNING
-	ERROR
-	FATAL
-	CRITICAL
-)
-
-var logLevelNames = map[LogLevel]string{
-	DEBUG:    "DEBUG",
-	TRACE:    "TRACE",
-	INFO:     "INFO",
-	NOTICE:   "NOTICE",
-	WARNING:  "WARNING",
-	ERROR:    "ERROR",
-	FATAL:    "FATAL",
-	CRITICAL: "CRITICAL",
-}
-
 type Logger struct {
 	DebugLogger  *log.Logger
 	OutputLogger *log.Logger
@@ -130,7 +106,23 @@ func (l *Logger) rotateLog(logPath string) error {
 	return os.Rename(logPath, backupPath)
 }
 
-func (l *Logger) writeToLog(target *log.Logger, level LogLevel, messages ...string) {
+func (l *Logger) writeToLog(target *log.Logger, level string, messages ...string) {
+	level = strings.ToUpper(level)
+	isValid := map[string]bool{
+		"DEBUG":    true,
+		"TRACE":    true,
+		"INFO":     true,
+		"NOTICE":   true,
+		"WARNING":  true,
+		"ERROR":    true,
+		"FATAL":    true,
+		"CRITICAL": true,
+	}[level]
+
+	if !isValid {
+		return
+	}
+
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -138,10 +130,9 @@ func (l *Logger) writeToLog(target *log.Logger, level LogLevel, messages ...stri
 		return
 	}
 
-	levelName := logLevelNames[level]
 	prefix := ""
-	if level != INFO {
-		prefix = fmt.Sprintf("[%s] ", levelName)
+	if level != "INFO" {
+		prefix = fmt.Sprintf("[%s] ", level)
 	}
 
 	for i, msg := range messages {
@@ -157,37 +148,37 @@ func (l *Logger) writeToLog(target *log.Logger, level LogLevel, messages ...stri
 }
 
 func (l *Logger) Debug(messages ...string) {
-	l.writeToLog(l.DebugLogger, DEBUG, messages...)
+	l.writeToLog(l.DebugLogger, "DEBUG", messages...)
 }
 
 func (l *Logger) Trace(messages ...string) {
-	l.writeToLog(l.DebugLogger, TRACE, messages...)
+	l.writeToLog(l.DebugLogger, "TRACE", messages...)
 }
 
 func (l *Logger) Info(messages ...string) {
-	l.writeToLog(l.OutputLogger, INFO, messages...)
+	l.writeToLog(l.OutputLogger, "INFO", messages...)
 }
 
 func (l *Logger) Notice(messages ...string) {
-	l.writeToLog(l.OutputLogger, NOTICE, messages...)
+	l.writeToLog(l.OutputLogger, "NOTICE", messages...)
 }
 
 func (l *Logger) Warning(messages ...string) {
-	l.writeToLog(l.OutputLogger, WARNING, messages...)
+	l.writeToLog(l.OutputLogger, "WARNING", messages...)
 }
 
 func (l *Logger) Error(messages ...string) error {
-	l.writeToLog(l.ErrorLogger, ERROR, messages...)
+	l.writeToLog(l.ErrorLogger, "ERROR", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
 func (l *Logger) Fatal(messages ...string) error {
-	l.writeToLog(l.ErrorLogger, FATAL, messages...)
+	l.writeToLog(l.ErrorLogger, "FATAL", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
 func (l *Logger) Critical(messages ...string) error {
-	l.writeToLog(l.ErrorLogger, CRITICAL, messages...)
+	l.writeToLog(l.ErrorLogger, "CRITICAL", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
