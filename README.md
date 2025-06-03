@@ -3,7 +3,7 @@
 > A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.<br>
 > version Node.js can get [here](https://github.com/pardnchiu/nodejs-jwt-auth)
 
-[![version](https://img.shields.io/github/v/tag/pardnchiu/golang-jwt-auth)](https://github.com/pardnchiu/golang-jwt-auth)
+[![version](https://img.shields.io/github/v/tag/pardnchiu/golang-jwt-auth)](https://github.com/pardnchiu/golang-jwt-auth/releases)
 
 ## Feature
 
@@ -353,7 +353,8 @@
 - `RefreshTokenCookieKey`: refresh id cookie name (default: 'refresh_id')
 - `MaxVersion`: Version threshold (default: 5)
 - `RefreshTTL`: TTL threshold (default: 0.5)
-- `LogPath`: Custom log path (default: './logs/golangJWTAuth')
+- `LogPath`: Custom log file path location (default: './logs/golangJWTAuth')
+- `LogStdout`: Enable stdout logging (default: false)
 
 ### Supported Authentication Methods
 
