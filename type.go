@@ -31,6 +31,7 @@ type Config struct {
 	MaxVersion           int                          `json:"max_version,omitempty"`             // Version threshold, default 5
 	RefreshTTL           float64                      `json:"refresh_ttl,omitempty"`             // TTL threshold, default 0.5
 	LogPath              string                       `json:"log_path,omitempty"`
+	LogStdout            bool                         `json:"log_stdout,omitempty"` // Default true
 	PrivateKeyPEM        *ecdsa.PrivateKey            `json:"-"`
 	PublicKeyPEM         *ecdsa.PublicKey             `json:"-"`
 }

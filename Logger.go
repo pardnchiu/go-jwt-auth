@@ -12,6 +12,7 @@ import (
 )
 
 type Logger struct {
+	Stdout       bool
 	DebugLogger  *log.Logger
 	OutputLogger *log.Logger
 	ErrorLogger  *log.Logger
@@ -26,6 +27,7 @@ type LoggerConfig struct {
 	Path    string
 	MaxSize int64
 	rw      os.FileMode
+	Stdout  bool
 }
 
 func newLogger(config LoggerConfig) (*Logger, error) {
@@ -47,6 +49,7 @@ func newLogger(config LoggerConfig) (*Logger, error) {
 		Path:    config.Path,
 		MaxSize: config.MaxSize,
 		File:    make([]*os.File, 0, 3),
+		Stdout:  config.Stdout,
 	}
 
 	if err := logger.initLoggers(config.rw); err != nil {
@@ -76,9 +79,20 @@ func (l *Logger) initLoggers(fileMode os.FileMode) error {
 	l.File = append(l.File, debugFile, outputFile, errorFile)
 
 	flags := log.LstdFlags | log.Lmicroseconds
-	l.DebugLogger = log.New(io.MultiWriter(debugFile, os.Stdout), "", flags)
-	l.OutputLogger = log.New(io.MultiWriter(outputFile, os.Stdout), "", flags)
-	l.ErrorLogger = log.New(io.MultiWriter(errorFile, os.Stderr), "", flags)
+
+	var debugWriters []io.Writer = []io.Writer{debugFile}
+	var outputWriters []io.Writer = []io.Writer{outputFile}
+	var errorWriters []io.Writer = []io.Writer{errorFile}
+
+	if l.Stdout {
+		debugWriters = append(debugWriters, os.Stdout)
+		outputWriters = append(outputWriters, os.Stdout)
+		errorWriters = append(errorWriters, os.Stderr)
+	}
+
+	l.DebugLogger = log.New(io.MultiWriter(debugWriters...), "", flags)
+	l.OutputLogger = log.New(io.MultiWriter(outputWriters...), "", flags)
+	l.ErrorLogger = log.New(io.MultiWriter(errorWriters...), "", flags)
 
 	return nil
 }
