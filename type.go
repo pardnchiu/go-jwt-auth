@@ -3,7 +3,6 @@ package golangJwtAuth
 import (
 	"context"
 	"crypto/ecdsa"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -81,13 +80,4 @@ type AuthResult struct {
 type TokenResult struct {
 	Token     string `json:"token"`
 	RefreshId string `json:"refresh_id"`
-}
-
-type Logger struct {
-	InitLogger    *log.Logger
-	CreateLogger  *log.Logger
-	RefreshLogger *log.Logger
-	VerifyLogger  *log.Logger
-	RevokeLogger  *log.Logger
-	Path          string
 }
