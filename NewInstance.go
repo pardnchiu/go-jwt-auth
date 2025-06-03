@@ -19,7 +19,11 @@ func New(c *Config) (*JWTAuth, error) {
 		c.LogPath = "./logs/golangJWTAuth"
 	}
 
-	logger, err := newLogger(c.LogPath)
+	logger, err := newLogger(LoggerConfig{
+		Path:    c.LogPath,
+		MaxSize: 16 * 1024 * 1024,
+		rw:      0644,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to init logger: %v", err)
 	}

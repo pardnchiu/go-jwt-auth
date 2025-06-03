@@ -7,112 +7,232 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
+
+type LogLevel int
+
+const (
+	DEBUG LogLevel = iota
+	TRACE
+	INFO
+	NOTICE
+	WARNING
+	ERROR
+	FATAL
+	CRITICAL
+)
+
+var logLevelNames = map[LogLevel]string{
+	DEBUG:    "DEBUG",
+	TRACE:    "TRACE",
+	INFO:     "INFO",
+	NOTICE:   "NOTICE",
+	WARNING:  "WARNING",
+	ERROR:    "ERROR",
+	FATAL:    "FATAL",
+	CRITICAL: "CRITICAL",
+}
 
 type Logger struct {
 	DebugLogger  *log.Logger
 	OutputLogger *log.Logger
 	ErrorLogger  *log.Logger
 	Path         string
+	File         []*os.File
+	mu           sync.RWMutex
+	MaxSize      int64
+	Closed       bool
 }
 
-func newLogger(path string) (*Logger, error) {
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create log directory: %v", err)
-	}
-
-	initLog, initErr := openLog(path, "debug.log")
-	outputLog, actionErr := openLog(path, "output.log")
-	errorLog, actionErr := openLog(path, "error.log")
-
-	if initErr != nil || actionErr != nil {
-		return nil, fmt.Errorf("failed to open log files: init=%v, action=%v",
-			initErr, actionErr)
-	}
-
-	return &Logger{
-		DebugLogger:  log.New(io.MultiWriter(initLog, os.Stdout), "", log.LstdFlags),
-		OutputLogger: log.New(io.MultiWriter(outputLog, os.Stdout), "", log.LstdFlags),
-		ErrorLogger:  log.New(io.MultiWriter(errorLog, os.Stdout), "", log.LstdFlags),
-		Path:         path,
-	}, nil
+type LoggerConfig struct {
+	Path    string
+	MaxSize int64
+	rw      os.FileMode
 }
 
-func openLog(path string, target string) (*os.File, error) {
-	file, err := os.OpenFile(filepath.Join(path, target), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+func newLogger(config LoggerConfig) (*Logger, error) {
+	if config.Path == "" {
+		config.Path = "./logs/golangJWTAuth"
+	}
+	if config.rw == 0 {
+		config.rw = 0644
+	}
+	if config.MaxSize == 0 {
+		config.MaxSize = 16 * 1024 * 1024
+	}
+
+	if err := os.MkdirAll(config.Path, 0755); err != nil {
+		return nil, fmt.Errorf("Failed to create log: %w", err)
+	}
+
+	logger := &Logger{
+		Path:    config.Path,
+		MaxSize: config.MaxSize,
+		File:    make([]*os.File, 0, 3),
+	}
+
+	if err := logger.initLoggers(config.rw); err != nil {
+		logger.Close()
+		return nil, err
+	}
+
+	return logger, nil
+}
+
+func (l *Logger) initLoggers(fileMode os.FileMode) error {
+	debugFile, err := l.openLog("debug.log", fileMode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %v", target, err)
+		return err
+	}
+
+	outputFile, err := l.openLog("output.log", fileMode)
+	if err != nil {
+		return err
+	}
+
+	errorFile, err := l.openLog("error.log", fileMode)
+	if err != nil {
+		return err
+	}
+
+	l.File = append(l.File, debugFile, outputFile, errorFile)
+
+	flags := log.LstdFlags | log.Lmicroseconds
+	l.DebugLogger = log.New(io.MultiWriter(debugFile, os.Stdout), "", flags)
+	l.OutputLogger = log.New(io.MultiWriter(outputFile, os.Stdout), "", flags)
+	l.ErrorLogger = log.New(io.MultiWriter(errorFile, os.Stderr), "", flags)
+
+	return nil
+}
+
+func (l *Logger) openLog(filename string, fileMode os.FileMode) (*os.File, error) {
+	fullPath := filepath.Join(l.Path, filename)
+	if info, err := os.Stat(fullPath); err == nil {
+		if info.Size() > l.MaxSize {
+			if err := l.rotateLog(fullPath); err != nil {
+				return nil, fmt.Errorf("Failed to rotate %s: %w", filename, err)
+			}
+		}
+	}
+
+	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, fileMode)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to open %s: %w", filename, err)
 	}
 	return file, nil
 }
 
-func writeToLog(target *log.Logger, level string, message ...string) {
-	level = strings.ToUpper(level)
-	isValid := map[string]bool{
-		"DEBUG":    true,
-		"TRACE":    true,
-		"INFO":     true,
-		"NOTICE":   true,
-		"WARNING":  true,
-		"ERROR":    true,
-		"FATAL":    true,
-		"CRITICAL": true,
-	}[level]
+func (l *Logger) rotateLog(logPath string) error {
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.%s", logPath, timestamp)
+	return os.Rename(logPath, backupPath)
+}
 
-	if len(message) == 0 || !isValid {
+func (l *Logger) writeToLog(target *log.Logger, level LogLevel, messages ...string) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	if l.Closed || len(messages) == 0 {
 		return
 	}
 
-	state := ""
-	switch level {
-	case "INFO":
-		state = ""
-	default:
-		state = fmt.Sprintf("[%s] ", level)
+	levelName := logLevelNames[level]
+	prefix := ""
+	if level != INFO {
+		prefix = fmt.Sprintf("[%s] ", levelName)
 	}
 
-	for i, msg := range message {
-		if i == 0 {
-			target.Printf("%s%s", state, message[i])
-		} else if i == len(message)-1 {
+	for i, msg := range messages {
+		switch {
+		case i == 0:
+			target.Printf("%s%s", prefix, msg)
+		case i == len(messages)-1:
 			target.Printf("└── %s", msg)
-		} else {
+		default:
 			target.Printf("├── %s", msg)
 		}
 	}
 }
 
-func (l *Logger) Debug(message ...string) {
-	writeToLog(l.DebugLogger, "DEBUG", message...)
+func (l *Logger) Debug(messages ...string) {
+	l.writeToLog(l.DebugLogger, DEBUG, messages...)
 }
 
-func (l *Logger) Trace(message ...string) {
-	writeToLog(l.DebugLogger, "TRACE", message...)
+func (l *Logger) Trace(messages ...string) {
+	l.writeToLog(l.DebugLogger, TRACE, messages...)
 }
 
-func (l *Logger) Info(message ...string) {
-	writeToLog(l.OutputLogger, "INFO", message...)
+func (l *Logger) Info(messages ...string) {
+	l.writeToLog(l.OutputLogger, INFO, messages...)
 }
 
-func (l *Logger) Notice(message ...string) {
-	writeToLog(l.OutputLogger, "NOTICE", message...)
+func (l *Logger) Notice(messages ...string) {
+	l.writeToLog(l.OutputLogger, NOTICE, messages...)
 }
 
-func (l *Logger) Warning(message ...string) {
-	writeToLog(l.OutputLogger, "WARNING", message...)
+func (l *Logger) Warning(messages ...string) {
+	l.writeToLog(l.OutputLogger, WARNING, messages...)
 }
 
-func (l *Logger) Error(message ...string) error {
-	writeToLog(l.ErrorLogger, "ERROR", message...)
-	return fmt.Errorf("%s", strings.Join(message, " "))
+func (l *Logger) Error(messages ...string) error {
+	l.writeToLog(l.ErrorLogger, ERROR, messages...)
+	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
-func (l *Logger) Fatal(message ...string) error {
-	writeToLog(l.ErrorLogger, "FATAL", message...)
-	return fmt.Errorf("%s", strings.Join(message, " "))
+func (l *Logger) Fatal(messages ...string) error {
+	l.writeToLog(l.ErrorLogger, FATAL, messages...)
+	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
-func (l *Logger) Critical(message ...string) error {
-	writeToLog(l.ErrorLogger, "CRITICAL", message...)
-	return fmt.Errorf("%s", strings.Join(message, " "))
+func (l *Logger) Critical(messages ...string) error {
+	l.writeToLog(l.ErrorLogger, CRITICAL, messages...)
+	return fmt.Errorf("%s", strings.Join(messages, " "))
+}
+
+func (l *Logger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.Closed {
+		return nil
+	}
+
+	l.Closed = true
+	var errs []error
+
+	for _, file := range l.File {
+		if err := file.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("Closing log files: %v", errs)
+	}
+
+	return nil
+}
+
+func (l *Logger) Flush() error {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	if l.Closed {
+		return fmt.Errorf("Logger is closed")
+	}
+
+	var errs []error
+	for _, file := range l.File {
+		if err := file.Sync(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("Flushing log files: %v", errs)
+	}
+
+	return nil
 }
