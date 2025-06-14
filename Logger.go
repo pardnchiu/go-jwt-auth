@@ -26,16 +26,12 @@ type Logger struct {
 type LoggerConfig struct {
 	Path    string
 	MaxSize int64
-	rw      os.FileMode
 	Stdout  bool
 }
 
 func newLogger(config LoggerConfig) (*Logger, error) {
 	if config.Path == "" {
-		config.Path = "./logs/golangJWTAuth"
-	}
-	if config.rw == 0 {
-		config.rw = 0644
+		config.Path = "./logs"
 	}
 	if config.MaxSize == 0 {
 		config.MaxSize = 16 * 1024 * 1024
@@ -52,7 +48,7 @@ func newLogger(config LoggerConfig) (*Logger, error) {
 		Stdout:  config.Stdout,
 	}
 
-	if err := logger.initLoggers(config.rw); err != nil {
+	if err := logger.initLoggers(0644); err != nil {
 		logger.Close()
 		return nil, err
 	}
@@ -181,17 +177,26 @@ func (l *Logger) Warning(messages ...string) {
 	l.writeToLog(l.OutputLogger, "WARNING", messages...)
 }
 
-func (l *Logger) Error(messages ...string) error {
+func (l *Logger) Error(err error, messages ...string) error {
+	if err != nil {
+		messages = append(messages, err.Error())
+	}
 	l.writeToLog(l.ErrorLogger, "ERROR", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
-func (l *Logger) Fatal(messages ...string) error {
+func (l *Logger) Fatal(err error, messages ...string) error {
+	if err != nil {
+		messages = append(messages, err.Error())
+	}
 	l.writeToLog(l.ErrorLogger, "FATAL", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }
 
-func (l *Logger) Critical(messages ...string) error {
+func (l *Logger) Critical(err error, messages ...string) error {
+	if err != nil {
+		messages = append(messages, err.Error())
+	}
 	l.writeToLog(l.ErrorLogger, "CRITICAL", messages...)
 	return fmt.Errorf("%s", strings.Join(messages, " "))
 }

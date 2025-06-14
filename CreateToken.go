@@ -7,91 +7,108 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
-func (j *JWTAuth) Create(r *http.Request, w http.ResponseWriter, u *AuthData) (*TokenResult, error) {
-	if u == nil {
-		return nil, j.Logger.Error("Auth data is required")
+func (j *JWTAuth) Create(w http.ResponseWriter, r *http.Request, auth *Auth) JWTAuthResult {
+	now := time.Now()
+	jti := uuid()
+	fp := j.getFingerprint(w, r)
+
+	// * 未提供 Auth 資料
+	if auth == nil {
+		return JWTAuthResult{
+			StatusCode: http.StatusBadRequest,
+			Error:      j.logger.Error(nil, "missing auth data").Error(),
+			ErrorTag:   errorDataMissing,
+		}
 	}
 
-	dateNow := time.Now()
-	jwtID := uuid.New().String()
-	fp := j.getFingerprint(r)
-
-	refreshId, err := j.createRefreshId(u.ID, u.Name, u.Email, fp, jwtID)
+	refreshID, err := j.createRefreshId(auth, fp, jti)
 	if err != nil {
-		return nil, j.Logger.Error(
-			"Failed to create Refresh ID",
-			fmt.Sprintf("Auth ID: %s", u.ID),
-			err.Error(),
-		)
+		return JWTAuthResult{
+			StatusCode: http.StatusInternalServerError,
+			Error:      j.logger.Error(err, "refresh ID creation failed").Error(),
+			ErrorTag:   errorFailedToCreate,
+		}
 	}
 
-	claims := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
-		"id":         u.ID,
-		"name":       u.Name,
-		"email":      u.Email,
-		"thumbnail":  u.Thumbnail,
-		"scope":      u.Scope,
-		"role":       u.Role,
-		"level":      u.Level,
-		"fp":         fp,
-		"jti":        jwtID,
-		"refresh_id": refreshId,
-		"exp":        dateNow.Add(j.Config.AccessTokenExpires).Unix(),
-		"iat":        dateNow.Unix(),
-		"nbf":        dateNow.Unix(),
-	})
-
-	accessToken, err := claims.SignedString(j.Config.PrivateKeyPEM)
+	accessToken, err := j.signJWT(auth, refreshID, fp, jti)
 	if err != nil {
-		return nil, j.Logger.Error(
-			"Failed to sign access token",
-			fmt.Sprintf("Auth ID: %s", u.ID),
-			err.Error(),
-		)
+		return JWTAuthResult{
+			StatusCode: http.StatusInternalServerError,
+			Error:      j.logger.Error(err, "JWT signing failed").Error(),
+			ErrorTag:   errorFailedToSign,
+		}
 	}
 
-	j.setCookie(w, j.Config.AccessTokenCookieKey, accessToken, dateNow.Add(j.Config.AccessTokenExpires))
-	j.setCookie(w, j.Config.RefreshIdCookieKey, refreshId, dateNow.Add(j.Config.RefreshIdExpires))
+	j.setCookie(w, j.config.Option.AccessTokenCookieKey, accessToken, now.Add(j.config.Option.AccessTokenExpires))
+	j.setCookie(w, j.config.Option.RefreshIdCookieKey, refreshID, now.Add(j.config.Option.RefreshIdExpires))
 
 	refreshData := RefreshData{
-		Data:        u,
+		Data:        auth,
 		Version:     1,
 		Fingerprint: fp,
-		EXP:         dateNow.Add(j.Config.AccessTokenExpires).Unix(),
-		IAT:         dateNow.Unix(),
-		JTI:         jwtID,
+		Exp:         now.Add(j.config.Option.AccessTokenExpires).Unix(),
+		Iat:         now.Unix(),
+		Jti:         jti,
 	}
 	refreshDataJson, err := json.Marshal(refreshData)
 	if err != nil {
-		return nil, j.Logger.Error(
-			"Failed to parse refresh data",
-			fmt.Sprintf("Auth ID: %s", u.ID),
-			err.Error(),
-		)
+		return JWTAuthResult{
+			StatusCode: http.StatusInternalServerError,
+			Error:      j.logger.Error(err, "refresh data marshaling failed").Error(),
+			ErrorTag:   errorFailedToCreate,
+		}
 	}
 
-	pipe := j.Redis.TxPipeline()
-	pipe.SetEx(j.Context, "refresh:"+refreshId, string(refreshDataJson), j.Config.RefreshIdExpires)
-	pipe.SetEx(j.Context, "jti:"+jwtID, "1", j.Config.AccessTokenExpires)
-	_, err = pipe.Exec(j.Context)
+	keyRefreshID := fmt.Sprintf(redisKeyRefreshID, refreshID)
+	keyJTI := fmt.Sprintf(redisKeyJTI, jti)
+
+	pipe := j.redis.TxPipeline()
+	pipe.SetEx(j.context, keyRefreshID, string(refreshDataJson), j.config.Option.RefreshIdExpires)
+	pipe.SetEx(j.context, keyJTI, "1", j.config.Option.AccessTokenExpires)
+	_, err = pipe.Exec(j.context)
 	if err != nil {
-		return nil, j.Logger.Error(
-			"Failed to store RefreshID/JTI in redis",
-			fmt.Sprintf("Auth ID: %s", u.ID),
-			err.Error(),
-		)
+		return JWTAuthResult{
+			StatusCode: http.StatusInternalServerError,
+			Error:      j.logger.Error(err, "Redis transaction failed").Error(),
+			ErrorTag:   errorFailedToStore,
+		}
 	}
 
-	j.Logger.Info(
-		"Created access token successfully",
-		fmt.Sprintf("Auth ID: %s", u.ID),
-	)
+	return JWTAuthResult{
+		Success:    true,
+		StatusCode: http.StatusOK,
+		Data:       auth,
+		Token: &TokenResult{
+			Token:     accessToken,
+			RefreshId: refreshID,
+		},
+	}
+}
 
-	return &TokenResult{
-		Token:     accessToken,
-		RefreshId: refreshId,
-	}, nil
+func (j *JWTAuth) signJWT(data *Auth, refreshID string, fp string, jti string) (string, error) {
+	now := time.Now()
+	claimsMap := jwt.MapClaims{
+		"id":        data.ID,
+		"name":      data.Name,
+		"email":     data.Email,
+		"thumbnail": data.Thumbnail,
+		"scope":     data.Scope,
+		"role":      data.Role,
+		"level":     data.Level,
+		"fp":        fp,
+		"jti":       jti,
+		"exp":       now.Add(j.config.Option.AccessTokenExpires).Unix(),
+		"iat":       now.Unix(),
+		"nbf":       now.Unix(),
+	}
+	claimsMap[j.config.Option.RefreshIdCookieKey] = refreshID
+	claims := jwt.NewWithClaims(jwt.SigningMethodES256, claimsMap)
+	accessToken, err := claims.SignedString(j.pem.private)
+	// * 無法簽署新的 Access Token
+	if err != nil {
+		return "", err
+	}
+	return accessToken, nil
 }
