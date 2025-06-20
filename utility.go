@@ -1,4 +1,4 @@
-package golangJwtAuth
+package jwtAuth
 
 import (
 	"crypto/sha256"

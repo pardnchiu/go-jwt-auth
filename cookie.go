@@ -1,4 +1,4 @@
-package golangJwtAuth
+package jwtAuth
 
 import (
 	"net/http"

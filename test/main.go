@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	golangJwtAuth "github.com/pardnchiu/golang-jwt-auth"
+	jwtAuth "github.com/pardnchiu/golang-jwt-auth"
 )
 
 var websocketUpgrade = websocket.Upgrader{
@@ -18,19 +18,19 @@ var websocketUpgrade = websocket.Upgrader{
 }
 
 func main() {
-	config := &golangJwtAuth.Config{
-		Redis: golangJwtAuth.Redis{
+	config := &jwtAuth.Config{
+		Redis: jwtAuth.Redis{
 			Host:     "localhost",
 			Port:     6379,
 			Password: "0123456789",
 			DB:       0,
 		},
-		CheckAuth: func(userData golangJwtAuth.Auth) (bool, error) {
+		CheckAuth: func(userData jwtAuth.Auth) (bool, error) {
 			return userData.ID == "1", nil
 		},
 	}
 
-	auth, err := golangJwtAuth.New(config)
+	auth, err := jwtAuth.New(config)
 	if err != nil {
 		log.Fatal("failed to init:", err)
 	}
@@ -63,7 +63,7 @@ func main() {
 			return
 		}
 
-		user := &golangJwtAuth.Auth{
+		user := &jwtAuth.Auth{
 			ID:    "1",
 			Name:  "John",
 			Email: "john@example.com",
@@ -117,7 +117,7 @@ func main() {
 	protected.Use(auth.GinMiddleware())
 	{
 		protected.GET("/user", func(c *gin.Context) {
-			user, _ := golangJwtAuth.GetAuthDataFromGinContext(c)
+			user, _ := jwtAuth.GetAuthDataFromGinContext(c)
 			c.JSON(http.StatusOK, gin.H{"user": user})
 		})
 	}
@@ -125,7 +125,7 @@ func main() {
 	r.Run(":8080")
 }
 
-func handleWebSocket(auth *golangJwtAuth.JWTAuth) gin.HandlerFunc {
+func handleWebSocket(auth *jwtAuth.JWTAuth) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		check := auth.Verify(c.Writer, c.Request)
 		if !check.Success {
