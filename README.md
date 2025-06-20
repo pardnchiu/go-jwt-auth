@@ -1,9 +1,9 @@
 # JWT Auth (Golang)
 
 > A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.<br>
-> Node.js version can be found [here](https://github.com/pardnchiu/nodejs-jwt-auth)
+> Node.js version can be found [here](https://github.com/pardnchiu/node-jwt-auth)
 
-[![version](https://img.shields.io/github/v/tag/pardnchiu/golang-jwt-auth)](https://github.com/pardnchiu/golang-jwt-auth/releases)
+[![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)
 
 ## Features
 
@@ -37,7 +37,7 @@
 
 - ### Installation
   ```bash
-  go get github.com/pardnchiu/golang-jwt-auth
+  go get github.com/pardnchiu/go-jwt-auth
   ```
 - ### Minimal Configuration
   ```go
@@ -46,7 +46,7 @@
   import (
     "log"
 
-    "github.com/pardnchiu/golang-jwt-auth"
+    "github.com/pardnchiu/go-jwt-auth"
   )
 
   func main() {
@@ -206,7 +206,7 @@
 
     import (
         "github.com/gin-gonic/gin"
-        "github.com/pardnchiu/golang-jwt-auth"
+        "github.com/pardnchiu/go-jwt-auth"
     )
 
     func main() {
@@ -239,7 +239,7 @@
 
     import (
         "net/http"
-        "github.com/pardnchiu/golang-jwt-auth"
+        "github.com/pardnchiu/go-jwt-auth"
     )
 
     func main() {

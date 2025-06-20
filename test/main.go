@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	jwtAuth "github.com/pardnchiu/golang-jwt-auth"
+	jwtAuth "github.com/pardnchiu/go-jwt-auth"
 )
 
 var websocketUpgrade = websocket.Upgrader{
