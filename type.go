@@ -6,14 +6,20 @@ import (
 	"net/http"
 	"time"
 
+	goLogger "github.com/pardnchiu/go-logger"
 	"github.com/redis/go-redis/v9"
 )
 
 const (
-	cookieKeyDeviceID = "conn.device.id"
+	defaultLogPath        = "./logs/jwtAuth"
+	defaultLogMaxSize     = 16 * 1024 * 1024
+	defaultLogMaxBackup   = 5
+	defaultPrivateKeyPath = "./keys/private-key.pem"
+	defaultPublicKeyPath  = "./keys/public-key.pem"
 )
 
 const (
+	cookieKeyDeviceID = "conn.device.id"
 	redisKeyRefreshID = "refresh:%s"
 	redisKeyLock      = "lock:refresh:%s"
 	redisKeyJTI       = "jti:%s"
@@ -26,11 +32,6 @@ const (
 	headerKeyRefreshID      = "X-Refresh-ID"
 	headerKeyNewAccessToken = "X-New-Access-Token"
 	headerKeyNewRefreshID   = "X-New-Refresh-ID"
-)
-
-const (
-	defaultPrivateKeyPath = "./keys/private-key.pem"
-	defaultPublicKeyPath  = "./keys/public-key.pem"
 )
 
 const (
@@ -47,31 +48,19 @@ const (
 	errorFailedToGet    = "failed_to_get"
 )
 
-// JWTAuth JWT 驗證主結構
-type JWTAuth struct {
-	config  *Config
-	logger  *Logger
-	redis   *redis.Client
-	context context.Context
-	pem     Pem
-}
+// * 繼承至 pardnchiu/go-logger
+type Log = goLogger.Log
+type Logger = goLogger.Logger
 
-// Config 設定結構
 type Config struct {
 	Redis     Redis                    `json:"redis"`               // Redis 設定
-	CheckAuth func(Auth) (bool, error) `json:"-"`                   // 檢查使用者是否存在的函數
 	File      *File                    `json:"file,omitempty"`      // 檔案設定
 	Log       *Log                     `json:"log,omitempty"`       // 日誌設定
 	Option    *Option                  `json:"parameter,omitempty"` // 可調參數
 	Cookie    *Cookie                  `json:"cookie,omitempty"`    // Cookie 設定
+	CheckAuth func(Auth) (bool, error) `json:"-"`                   // 檢查使用者是否存在的函數
 }
 
-type Pem struct {
-	private *ecdsa.PrivateKey // 私鑰
-	public  *ecdsa.PublicKey  // 公鑰
-}
-
-// Redis Redis 設定結構
 type Redis struct {
 	Host     string `json:"host"`               // Redis 主機位址
 	Port     int    `json:"port"`               // Redis 連接埠
@@ -82,12 +71,6 @@ type Redis struct {
 type File struct {
 	PrivateKeyPath string `json:"private_key_path,omitempty"`
 	PublicKeyPath  string `json:"public_key_path,omitempty"`
-}
-
-type Log struct {
-	Path    string `json:"path,omitempty"`     // 日誌檔案路徑，預設 `./logs/golangJwtAuth`
-	Stdout  bool   `json:"stdout,omitempty"`   // 是否輸出到標準輸出，預設 false
-	MaxSize int64  `json:"max_size,omitempty"` // 日誌檔案最大大小（位元組），預設 16 * 1024 * 1024
 }
 
 type Option struct {
@@ -107,6 +90,19 @@ type Cookie struct {
 	SameSite *http.SameSite `json:"same_site,omitempty"` // Cookie 的 SameSite 屬性，預設 lax
 	Secure   *bool          `json:"secure,omitempty"`    // Cookie 是否安全，預設 false
 	HttpOnly *bool          `json:"http_only,omitempty"` // Cookie 是否 HttpOnly，預設 true
+}
+
+type JWTAuth struct {
+	context context.Context
+	config  Config
+	logger  *Logger
+	redis   *redis.Client
+	pem     Pem
+}
+
+type Pem struct {
+	private *ecdsa.PrivateKey
+	public  *ecdsa.PublicKey
 }
 
 type JWTAuthResult struct {

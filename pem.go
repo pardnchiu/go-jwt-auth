@@ -9,10 +9,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 )
 
-func handlePEM(c *Config) error {
+func handlePEM(c Config) error {
 	if c.File != nil {
 		if c.File.PrivateKeyPath != "" {
 			bytes, err := os.ReadFile(c.File.PrivateKeyPath)
@@ -33,34 +32,38 @@ func handlePEM(c *Config) error {
 
 	// * 無私鑰檔案或是純文本配置，檢查本地檔案
 	if c.Option.PrivateKey == "" && c.Option.PublicKey == "" {
+		var privateByte, publicByte []byte
+		var err error
+
 		if checkFileExist(defaultPrivateKeyPath) && checkFileExist(defaultPublicKeyPath) {
-			// * 預設位置已存在私鑰
-			privateKeyBytes, err := os.ReadFile(defaultPrivateKeyPath)
+			privateByte, err = os.ReadFile(defaultPrivateKeyPath)
 			if err != nil {
 				return fmt.Errorf("No default private key: %v", err)
 			}
-			publicKeyBytes, err := os.ReadFile(defaultPublicKeyPath)
+
+			publicByte, err = os.ReadFile(defaultPublicKeyPath)
 			if err != nil {
 				return fmt.Errorf("No default public key: %v", err)
 			}
-			c.Option.PrivateKey = string(privateKeyBytes)
-			c.Option.PublicKey = string(publicKeyBytes)
 		} else {
 			// * 創建新的私鑰
 			if err := createPEM(defaultPrivateKeyPath, defaultPublicKeyPath); err != nil {
 				return fmt.Errorf("Failed to create keys: %v", err)
 			}
-			privateKeyBytes, err := os.ReadFile(defaultPrivateKeyPath)
+
+			privateByte, err = os.ReadFile(defaultPrivateKeyPath)
 			if err != nil {
-				return fmt.Errorf("Create private key failed: %v", err)
+				return fmt.Errorf("Failed to create private key: %v", err)
 			}
-			publicKeyBytes, err := os.ReadFile(defaultPublicKeyPath)
+
+			publicByte, err = os.ReadFile(defaultPublicKeyPath)
 			if err != nil {
-				return fmt.Errorf("Create public key failed: %v", err)
+				return fmt.Errorf("Failed to create public key: %v", err)
 			}
-			c.Option.PrivateKey = string(privateKeyBytes)
-			c.Option.PublicKey = string(publicKeyBytes)
 		}
+
+		c.Option.PrivateKey = string(privateByte)
+		c.Option.PublicKey = string(publicByte)
 	} else if c.Option.PrivateKey == "" || c.Option.PublicKey == "" {
 		return fmt.Errorf("Both private key and public key are required")
 	}
@@ -68,17 +71,13 @@ func handlePEM(c *Config) error {
 	return nil
 }
 
-func parsePEM(c *Config) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
-	if err := handlePEM(c); err != nil {
-		return nil, nil, fmt.Errorf("Failed to handle keys: %v", err)
-	}
-
-	block, _ := pem.Decode([]byte(c.Option.PrivateKey))
-	if block == nil {
+func parsePEM(c Config) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
+	privateDecode, _ := pem.Decode([]byte(c.Option.PrivateKey))
+	if privateDecode == nil {
 		return nil, nil, fmt.Errorf("Failed to decode private key")
 	}
 
-	parsedPrivateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	parsedPrivateKey, err := x509.ParsePKCS8PrivateKey(privateDecode.Bytes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Invalid private key: %v", err)
 	}
@@ -88,12 +87,12 @@ func parsePEM(c *Config) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
 		return nil, nil, fmt.Errorf("Private key is not ECDSA")
 	}
 
-	block, _ = pem.Decode([]byte(c.Option.PublicKey))
-	if block == nil {
+	publicDecode, _ := pem.Decode([]byte(c.Option.PublicKey))
+	if publicDecode == nil {
 		return nil, nil, fmt.Errorf("Failed to decode public key")
 	}
 
-	parsedPublicKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	parsedPublicKey, err := x509.ParsePKIXPublicKey(publicDecode.Bytes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Invalid public key: %v", err)
 	}
@@ -122,7 +121,7 @@ func createPEM(privateKeyPath, publicKeyPath string) error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(privateKeyPath), 0755); err != nil {
-		return fmt.Errorf("Failed to create keys directory: %v", err)
+		return fmt.Errorf("Failed to create folder %s: %v", privateKeyPath, err)
 	}
 
 	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
@@ -154,40 +153,4 @@ func createPEM(privateKeyPath, publicKeyPath string) error {
 	}
 
 	return nil
-}
-
-func validOptionData(option *Option) *Option {
-	defaultOption := &Option{
-		AccessTokenExpires:   15 * time.Minute,
-		RefreshIdExpires:     7 * 24 * time.Hour,
-		AccessTokenCookieKey: "access_token",
-		RefreshIdCookieKey:   "refresh_id",
-		MaxVersion:           5,
-		RefreshTTL:           0.5,
-	}
-
-	if option == nil {
-		return defaultOption
-	}
-
-	if option.AccessTokenExpires != 0 {
-		defaultOption.AccessTokenExpires = option.AccessTokenExpires
-	}
-	if option.RefreshIdExpires != 0 {
-		defaultOption.RefreshIdExpires = option.RefreshIdExpires
-	}
-	if option.AccessTokenCookieKey != "" {
-		defaultOption.AccessTokenCookieKey = option.AccessTokenCookieKey
-	}
-	if option.RefreshIdCookieKey != "" {
-		defaultOption.RefreshIdCookieKey = option.RefreshIdCookieKey
-	}
-	if option.MaxVersion != 0 {
-		defaultOption.MaxVersion = option.MaxVersion
-	}
-	if option.RefreshTTL != 0 {
-		defaultOption.RefreshTTL = option.RefreshTTL
-	}
-
-	return defaultOption
 }

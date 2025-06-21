@@ -3,270 +3,329 @@
 > A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.<br>
 > Node.js version can be found [here](https://github.com/pardnchiu/node-jwt-auth)
 
+[![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE)
 [![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)
+[![readme](https://img.shields.io/badge/readme-中文-blue)](https://github.com/pardnchiu/go-jwt-auth/blob/main/README.zh.md) 
 
-## Features
+## Three key features
 
-- ### Dual Token System
-  - Access Token (short-lived, default 15 minutes) + Refresh Token (long-lived, default 7 days)
-  - Automatic token refresh without re-login
-  - ES256 algorithm (Elliptic Curve Digital Signature) for high security
-- ### Device Fingerprinting
-  - Generate unique fingerprints based on user agent, device ID, OS, and browser
-  - Prevent token abuse across different devices
-  - Automatic device type detection (desktop, mobile, tablet)
-  - Persistent device ID tracking with automatic cookie management
-- ### Security Protection
-  - Token revocation: Add access tokens to blacklist on logout
-  - Version control: Prevent replay attacks, auto-generate new ID after 5 refreshes by default
-  - Smart refresh: Auto-regenerate based on remaining TTL (default under 50%)
-  - Concurrency protection: Redis lock mechanism prevents concurrent refresh conflicts
-- ### Zero Configuration
-  - Auto-generate ECDSA key pairs on first startup if not provided
-  - Multiple authentication methods: Cookie, Bearer Token, custom headers
-  - Flexible deployment: Support for development/testing/production environments
-  - Middleware support: Gin and standard HTTP middleware
+- **Dual Token System**: Access Token + Refresh ID, with automatic refresh
+- **Device Fingerprinting**: Generate unique fingerprints based on user agent, device ID, OS, and browser to prevent token abuse across different devices
+- **Security Protection**: Token revocation, version control, smart refresh, and concurrency protection with Redis lock mechanism
+
+## Flow
+
+<details>
+<summary>Click to show</summary>
+
+```mermaid
+flowchart TD
+  Start([Request Start]) --> Auth{Has Access Token?}
+  Auth -->|Yes| CheckRevoke[Check if Token is Revoked]
+  Auth -->|No| HasRefresh{Has Refresh ID?}
+  HasRefresh -->|No| Unauthorized[Return 401 Unauthorized]
+  HasRefresh -->|Yes| ValidateRefresh[Validate Refresh ID]
+  CheckRevoke --> IsRevoked{Token Revoked?}
+  IsRevoked -->|Yes| Unauthorized
+  IsRevoked -->|No| ParseToken[Parse Access Token]
+  ParseToken --> TokenValid{Token Valid?}
+  TokenValid -->|Yes| ValidateClaims[Validate Claims]
+  TokenValid -->|No| IsExpired{Token Expired?}
+  IsExpired -->|Yes| ParseExpiredToken[Parse Expired Token]
+  IsExpired -->|No| InvalidToken[Return 400 Invalid Token]
+  ParseExpiredToken --> ValidateExpiredClaims[Validate Expired Token Claims]
+  ValidateExpiredClaims --> ExpiredClaimsValid{Refresh ID and Fingerprint Match?}
+  ExpiredClaimsValid -->|No| InvalidClaims[Return 400 Invalid Claims]
+  ExpiredClaimsValid -->|Yes| RefreshFlow[Enter Refresh Flow]
+  ValidateClaims --> ClaimsValid{Claims Match?}
+  ClaimsValid -->|No| InvalidClaims
+  ClaimsValid -->|Yes| CheckJTI[Check JTI]
+  CheckJTI --> JTIValid{JTI Valid?}
+  JTIValid -->|No| Unauthorized
+  JTIValid -->|Yes| Success[Return 200 Success]
+  ValidateRefresh --> RefreshValid{Refresh ID Valid?}
+  RefreshValid -->|No| Unauthorized
+  RefreshValid -->|Yes| RefreshFlow
+  RefreshFlow --> AcquireLock[Acquire Refresh Lock]
+  AcquireLock --> LockSuccess{Lock Acquired?}
+  LockSuccess -->|No| TooManyRequests[Return 429 Too Many Requests]
+  LockSuccess -->|Yes| GetRefreshData[Get Refresh Data]
+  GetRefreshData --> CheckTTL[Check TTL]
+  CheckTTL --> NeedNewRefresh{Need New Refresh ID?}
+  NeedNewRefresh -->|Yes| CreateNewRefresh[Create New Refresh ID]
+  NeedNewRefresh -->|No| UpdateVersion[Update Version Number]
+  CreateNewRefresh --> SetOldRefreshExpire[Set Old Refresh ID to Expire in 5 Seconds]
+  SetOldRefreshExpire --> SetNewRefreshData[Set New Refresh Data]
+  UpdateVersion --> SetNewRefreshData
+  SetNewRefreshData --> CheckUserExists{User Exists Check}
+  CheckUserExists -->|No| Unauthorized
+  CheckUserExists -->|Yes| GenerateNewToken[Generate New Access Token]
+  GenerateNewToken --> StoreJTI[Store New JTI]
+  StoreJTI --> SetCookies[Set Cookies]
+  SetCookies --> ReleaseLock[Release Lock]
+  ReleaseLock --> RefreshSuccess[Return Refresh Success]
+```
+
+</details>
 
 ## Dependencies
 
-- [github.com/gin-gonic/gin](https://github.com/gin-gonic/gin)
-- [github.com/golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt/v5)
-- [github.com/redis/go-redis/v9](https://github.com/redis/go-redis/v9)
+- [`github.com/gin-gonic/gin`](https://github.com/gin-gonic/gin)
+- [`github.com/golang-jwt/jwt/v5`](https://github.com/golang-jwt/jwt/v5)
+- [`github.com/redis/go-redis/v9`](https://github.com/redis/go-redis/v9)
+- [`github.com/pardnchiu/go-logger`](https://github.com/pardnchiu/go-logger)
 
-## Usage
+## How to use
 
-- ### Installation
-  ```bash
-  go get github.com/pardnchiu/go-jwt-auth
-  ```
-- ### Minimal Configuration
-  ```go
-  package main
+### Installation
+```bash
+go get github.com/pardnchiu/go-jwt-auth
+```
 
-  import (
-    "log"
+### Initialization
+```go
+package main
 
-    "github.com/pardnchiu/go-jwt-auth"
-  )
+import (
+  "log"
+  "net/http"
+  
+  "github.com/gin-gonic/gin"
+  jwtAuth "github.com/pardnchiu/go-jwt-auth"
+)
 
-  func main() {
-    // Minimal configuration - keys will be auto-generated
-    config := &golangJwtAuth.Config{
-        Redis: golangJwtAuth.Redis{
-            Host: "localhost",
-            Port: 6379,
-            DB:   0,
-        },
-    }
-
-    jwtAuth, err := golangJwtAuth.New(config)
-    if err != nil {
-        log.Fatal("Initialization failed:", err)
-    }
-    defer jwtAuth.Close()
-    
-    // Start using...
+func main() {
+  // Minimal configuration - keys will be auto-generated
+  config := jwtAuth.Config{
+    Redis: jwtAuth.Redis{
+      Host:     "localhost",
+      Port:     6379,
+      Password: "password",
+      DB:       0,
+    },
+    CheckAuth: func(userData jwtAuth.Auth) (bool, error) {
+      // Custom user validation logic
+      return userData.ID != "", nil
+    },
   }
-  ```  
-- ### Complete Configuration Example
-  ```go
-  type Config struct {
-    // Redis connection configuration (required)
-    Redis Redis {
-        Host     string  // Redis host address (required)
-        Port     int     // Redis port (required)
-        Password string  // Redis password (default: "")
-        DB       int     // Redis database number (required)
-    }
-    
-    // User authentication callback (optional)
-    CheckAuth func(Auth) (bool, error)  // User authentication function (default: nil)
-    
-    // File path configuration (optional)
-    File *File {
-        PrivateKeyPath string  // Private key file path (default: "")
-        PublicKeyPath  string  // Public key file path (default: "")
-    }
-    
-    // Log configuration (optional)
-    Log *Log {
-        Path    string  // Log file path (default: "./logs/golangJwtAuth")
-        Stdout  bool    // Whether to output to stdout (default: false)
-        MaxSize int64   // Maximum log file size (default: 16777216 = 16MB)
-    }
-    
-    // System parameter configuration (optional)
-    Option *Option {
-        PrivateKey           string        // Private key content (default: "")
-        PublicKey            string        // Public key content (default: "")
-        AccessTokenExpires   time.Duration // Access Token expiration (default: 15 * time.Minute)
-        RefreshIdExpires     time.Duration // Refresh ID expiration (default: 7 * 24 * time.Hour)
-        AccessTokenCookieKey string        // Access Token Cookie name (default: "access_token")
-        RefreshIdCookieKey   string        // Refresh ID Cookie name (default: "refresh_id")
-        MaxVersion           int           // Maximum refresh version count (default: 5)
-        RefreshTTL           float64       // Refresh TTL threshold (default: 0.5)
-    }
-    
-    // Cookie security configuration (optional)
-    Cookie *Cookie {
-        Domain   *string        // Cookie domain (default: nil)
-        Path     *string        // Cookie path (default: nil, uses "/")
-        SameSite *http.SameSite // SameSite attribute (default: nil, uses Lax)
-        Secure   *bool          // HTTPS only transmission (default: nil, uses false)
-        HttpOnly *bool          // Disable JavaScript access (default: nil, uses true)
-    }
+
+  auth, err := jwtAuth.New(config)
+  if err != nil {
+    log.Fatal("Failed to initialize:", err)
   }
+  defer auth.Close()
+
+  r := gin.Default()
+
+  // Login endpoint
+  r.POST("/login", func(c *gin.Context) {
+    // After validating login credentials...
+    user := &jwtAuth.Auth{
+      ID:    "user123",
+      Name:  "John Doe",
+      Email: "john@example.com",
+      Scope: []string{"read", "write"},
+    }
+
+    result := auth.Create(c.Writer, c.Request, user)
+    if !result.Success {
+      c.JSON(result.StatusCode, gin.H{"error": result.Error})
+      return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+      "success": true,
+      "token":   result.Token.Token,
+      "user":    result.Data,
+    })
+  })
+
+  // Protected routes
+  protected := r.Group("/api")
+  protected.Use(auth.GinMiddleware())
+  {
+    protected.GET("/profile", func(c *gin.Context) {
+      user, _ := jwtAuth.GetAuthDataFromGinContext(c)
+      c.JSON(http.StatusOK, gin.H{"user": user})
+    })
+  }
+
+  // Logout endpoint
+  r.POST("/logout", func(c *gin.Context) {
+    result := auth.Revoke(c.Writer, c.Request)
+    if !result.Success {
+      c.JSON(result.StatusCode, gin.H{"error": result.Error})
+      return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out"})
+  })
+
+  r.Run(":8080")
+}
+```
+
+### Configuration Details
+
+```go
+type Config struct {
+  Redis     Redis                    // Redis configuration (required)
+  File      *File                    // File configuration for key management (optional)
+  Log       *Log                     // Logging configuration (optional)
+  Option    *Option                  // System parameters and token settings (optional)
+  Cookie    *Cookie                  // Cookie security settings (optional)
+  CheckAuth func(Auth) (bool, error) // User authentication validation function (optional)
+}
+
+type Redis struct {
+  Host     string // Redis server host address (required)
+  Port     int    // Redis server port number (required)
+  Password string // Redis authentication password (optional, empty for no auth)
+  DB       int    // Redis database index (required, typically 0-15)
+}
+
+type File struct {
+  PrivateKeyPath string // Path to ECDSA private key file for JWT signing
+  PublicKeyPath  string // Path to ECDSA public key file for JWT verification
+}
+
+type Log struct {
+  Path      string // Log directory path (default: ./logs/jwtAuth)
+  Stdout    bool   // Enable console output logging (default: false)
+  MaxSize   int64  // Maximum log file size before rotation in bytes (default: 16MB)
+  MaxBackup int    // Number of rotated log files to retain (default: 5)
+}
+
+type Option struct {
+  PrivateKey           string        // ECDSA private key content (auto-generated P-256 if not provided)
+  PublicKey            string        // ECDSA public key content (auto-generated P-256 if not provided)
+  AccessTokenExpires   time.Duration // Access token expiration duration (default: 15 minutes)
+  RefreshIdExpires     time.Duration // Refresh ID expiration duration (default: 7 days)
+  AccessTokenCookieKey string        // Access token cookie name (default: "access_token")
+  RefreshIdCookieKey   string        // Refresh ID cookie name (default: "refresh_id")
+  MaxVersion           int           // Maximum refresh token version count (default: 5)
+  RefreshTTL           float64       // Refresh threshold as fraction of TTL (default: 0.5)
+}
+
+type Cookie struct {
+  Domain   *string        // Cookie domain scope (nil for current domain)
+  Path     *string        // Cookie path scope (default: "/")
+  SameSite *http.SameSite // Cookie SameSite policy (default: Lax for CSRF protection)
+  Secure   *bool          // Cookie secure flag for HTTPS only (default: false)
+  HttpOnly *bool          // Cookie HttpOnly flag to prevent XSS (default: true)
+}
+```
+
+## Supported Operations
+
+### Core Methods
+
+```go
+// Create new authentication session
+result := auth.Create(w, r, userData)
+
+// Verify authentication status
+result := auth.Verify(w, r)
+
+// Revoke authentication (logout)
+result := auth.Revoke(w, r)
+```
+
+### Middleware Usage
+
+```go
+// Gin framework middleware
+protected.Use(auth.GinMiddleware())
+
+// Standard HTTP middleware
+server := &http.Server{
+  Handler: auth.HTTPMiddleware(handler),
+}
+
+// Get user data from context
+user, exists := jwtAuth.GetAuthDataFromGinContext(c)
+user, exists := jwtAuth.GetAuthDataFromHTTPRequest(r)
+```
+
+### Authentication Methods
+
+```go
+// Multiple authentication methods supported:
+// 1. Custom headers
+r.Header.Set("X-Device-FP", fingerprint)
+r.Header.Set("X-Refresh-ID", refreshID)
+r.Header.Set("Authorization", "Bearer "+token)
+
+// 2. Cookies (automatically managed)
+// access_token, refresh_id cookies
+
+// 3. Device fingerprinting (automatic)
+// Based on user agent, device ID, OS, browser
+```
+
+## Core Features
+
+### Connection Management
+
+- **New** - Create new JWT auth instance
+  ```go
+  auth, err := jwtAuth.New(config)
+  ```
+  - Initialize Redis connection
+  - Setup logging system
+  - Auto-generate ECDSA keys if not provided
+  - Validate configuration
+
+- **Close** - Close JWT auth instance
+  ```go
+  err := auth.Close()
+  ```
+  - Close Redis connection
+  - Release system resources
+
+### Security Features
+
+- **Device Fingerprinting** - Generate unique fingerprints based on user agent, device ID, OS, browser, and device type
+  ```go
+  fingerprint := auth.getFingerprint(w, r)
   ```
 
-## API Usage Guide
-
-- ### Create - `Create()`
+- **Token Revocation** - Add tokens to blacklist on logout
   ```go
-  func loginHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-      return func(w http.ResponseWriter, r *http.Request) {
-          // After validating login credentials...
-          
-          userData := &golangJwtAuth.Auth{
-              ID:        "user123",
-              Name:      "John Doe",
-              Email:     "john@example.com",
-              Thumbnail: "avatar.jpg",
-              Role:      "user",
-              Level:     1,
-              Scope:     []string{"read", "write"},
-          }
-
-          result := jwtAuth.Create(w, r, userData)
-          if !result.Success {
-              w.WriteHeader(result.StatusCode)
-              json.NewEncoder(w).Encode(map[string]string{
-                  "error": result.Error,
-              })
-              return
-          }
-
-          // Automatically set cookies and return tokens
-          json.NewEncoder(w).Encode(map[string]interface{}{
-              "success":    true,
-              "token":      result.Token.Token,
-              "refresh_id": result.Token.RefreshId,
-              "user":       result.Data,
-          })
-      }
-  }
+  result := auth.Revoke(w, r)
   ```
-- ### Verify - `Verify()`
+
+- **Automatic Refresh** - Smart token refresh based on expiration and version control
   ```go
-  func protectedHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-      return func(w http.ResponseWriter, r *http.Request) {
-          result := jwtAuth.Verify(w, r)
-          
-          if !result.Success {
-              w.WriteHeader(result.StatusCode)
-              json.NewEncoder(w).Encode(map[string]string{
-                  "error":     result.Error,
-                  "error_tag": result.ErrorTag,
-              })
-              return
-          }
-
-          // Use authenticated user data
-          user := result.Data
-          json.NewEncoder(w).Encode(map[string]interface{}{
-              "message": "Protected resource access successful",
-              "user":    user,
-          })
-      }
-  }
+  // Automatically triggered during Verify() when needed
+  result := auth.Verify(w, r)
   ```
-- ### Revoke - `Revoke()`
+
+### Authentication Flow
+
+- **Create** - Generate new authentication session
   ```go
-  func logoutHandler(jwtAuth *golangJwtAuth.JWTAuth) http.HandlerFunc {
-      return func(w http.ResponseWriter, r *http.Request) {
-          result := jwtAuth.Revoke(w, r)
-          if !result.Success {
-              w.WriteHeader(result.StatusCode)
-              json.NewEncoder(w).Encode(map[string]string{
-                  "error":     result.Error,
-                  "error_tag": result.ErrorTag,
-              })
-              return
-          }
-
-          json.NewEncoder(w).Encode(map[string]string{
-              "message": "Successfully logged out",
-          })
-      }
-  }
+  result := auth.Create(w, r, userData)
   ```
-- ### Middleware
-  - #### Gin Framework
-    ```go
-    package main
+  - Generate access token and refresh ID
+  - Set secure cookies
+  - Store session data in Redis
 
-    import (
-        "github.com/gin-gonic/gin"
-        "github.com/pardnchiu/go-jwt-auth"
-    )
+- **Verify** - Validate authentication status
+  ```go
+  result := auth.Verify(w, r)
+  ```
+  - Parse and validate JWT token
+  - Check device fingerprint
+  - Auto-refresh if needed
+  - Return user data
 
-    func main() {
-        // Initialize jwtAuth...
-        
-        r := gin.Default()
-        
-        // Protected route group
-        protected := r.Group("/api/protected")
-        protected.Use(jwtAuth.GinMiddleware())
-        {
-            protected.GET("/profile", func(c *gin.Context) {
-                // Get user data from Context
-                user, exists := golangJwtAuth.GetAuthDataFromGinContext(c)
-                if !exists {
-                    c.JSON(500, gin.H{"error": "Unable to retrieve user data"})
-                    return
-                }
-                
-                c.JSON(200, gin.H{"user": user})
-            })
-        }
-        
-        r.Run(":8080")
-    }
-    ```
-  - #### Standard HTTP
-    ```go
-    package main
-
-    import (
-        "net/http"
-        "github.com/pardnchiu/go-jwt-auth"
-    )
-
-    func main() {
-        // Initialize jwtAuth...
-        
-        mux := http.NewServeMux()
-        
-        mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
-            // Get user data from Request Context
-            user, exists := golangJwtAuth.GetAuthDataFromHTTPRequest(r)
-            if !exists {
-                http.Error(w, "Unable to retrieve user data", http.StatusInternalServerError)
-                return
-            }
-            
-            json.NewEncoder(w).Encode(map[string]interface{}{"user": user})
-        })
-        
-        // Apply middleware
-        server := &http.Server{
-            Addr:    ":8080",
-            Handler: jwtAuth.HTTPMiddleware(mux),
-        }
-        
-        server.ListenAndServe()
-    }
-    ```
+- **Revoke** - Terminate authentication session
+  ```go
+  result := auth.Revoke(w, r)
+  ```
+  - Clear cookies
+  - Add token to blacklist
+  - Update Redis records
 
 ## Security Features
 
@@ -276,42 +335,20 @@
 - **Version Control**: Track refresh token versions to prevent replay attacks
 - **Fingerprint Verification**: Ensure tokens can only be used on the same device/browser
 - **Auto Key Generation**: Automatically generate secure ECDSA key pairs if not provided
-
-## Automatic Token Refresh Mechanism
-
-The system automatically refreshes tokens in the following situations:
-
-1. **Access Token Expired** - Automatically update using refresh token
-2. **Version Limit Reached** - Regenerate refresh ID (default 5 times)
-3. **TTL Below Threshold** - Auto-regenerate based on remaining TTL (default under 50%)
-
-New tokens are returned via:
-- **HTTP Headers**: `X-New-Access-Token`, `X-New-Refresh-ID`
-- **Cookies**: Automatic updates
-- **Concurrency Safe**: Redis locks prevent duplicate refreshes
-
-## Supported Authentication Methods
-
-| Method | Format | Priority |
-|--------|--------|----------|
-| **Custom Fingerprint** | `X-Device-FP: <fingerprint>` | 1 |
-| **Refresh ID** | `X-Refresh-ID: <refresh_id>` | 1 |
-| **Device ID** | `X-Device-ID: <device_id>` | 1 |
-| **Bearer Token** | `Authorization: Bearer <token>` | 1 |
-| **Cookie** | Automatically read configured cookie names | 2 |
+- **Concurrency Protection**: Redis lock mechanism prevents concurrent refresh conflicts
 
 ## Error Handling
 
-All major methods return a `JWTAuthResult` structure:
+All methods return a [`JWTAuthResult`](type.go) structure:
 
 ```go
 type JWTAuthResult struct {
-    StatusCode int          `json:"status_code"`         // HTTP status code
-    Success    bool         `json:"success"`             // Whether operation succeeded
-    Data       *Auth        `json:"data,omitempty"`      // User data
-    Token      *TokenResult `json:"token,omitempty"`     // Token information
-    Error      string       `json:"error,omitempty"`     // Error message
-    ErrorTag   string       `json:"error_tag,omitempty"` // Error classification tag
+  StatusCode int          // HTTP status code
+  Success    bool         // Whether operation succeeded
+  Data       *Auth        // User data
+  Token      *TokenResult // Token information
+  Error      string       // Error message
+  ErrorTag   string       // Error classification tag
 }
 ```
 
@@ -321,8 +358,6 @@ type JWTAuthResult struct {
 - `data_invalid` - Invalid data format
 - `unauthorized` - Authentication failed
 - `revoked` - Token has been revoked
-- `not_found` - Resource not found
-- `not_matched` - Data mismatch
 - `failed_to_update` - Update operation failed
 - `failed_to_create` - Creation operation failed
 - `failed_to_sign` - Token signing failed
@@ -331,18 +366,18 @@ type JWTAuthResult struct {
 
 ## License
 
-This source code project is licensed under the [MIT](https://github.com/pardnchiu/FlexPlyr/blob/main/LICENSE) license.
+This source code project is licensed under the [MIT](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE) License.
 
-## Creator
+## Author
 
 <img src="https://avatars.githubusercontent.com/u/25631760" align="left" width="96" height="96" style="margin-right: 0.5rem;">
 
 <h4 style="padding-top: 0">邱敬幃 Pardn Chiu</h4>
 
 <a href="mailto:dev@pardn.io" target="_blank">
-    <img src="https://pardn.io/image/email.svg" width="48" height="48">
+  <img src="https://pardn.io/image/email.svg" width="48" height="48">
 </a> <a href="https://linkedin.com/in/pardnchiu" target="_blank">
-    <img src="https://pardn.io/image/linkedin.svg" width="48" height="48">
+  <img src="https://pardn.io/image/linkedin.svg" width="48" height="48">
 </a>
 
 ***

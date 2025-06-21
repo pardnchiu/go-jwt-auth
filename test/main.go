@@ -18,7 +18,7 @@ var websocketUpgrade = websocket.Upgrader{
 }
 
 func main() {
-	config := &jwtAuth.Config{
+	config := jwtAuth.Config{
 		Redis: jwtAuth.Redis{
 			Host:     "localhost",
 			Port:     6379,
