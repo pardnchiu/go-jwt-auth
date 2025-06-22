@@ -1,7 +1,7 @@
 # JWT 身份驗證 (Golang)
 
 > 一個提供存取權杖和更新權杖機制的 JWT 身份驗證套件，具備指紋識別、Redis 儲存和自動更新功能。<br>
-> Node.js 版本可在[此處](https://github.com/pardnchiu/node-jwt-auth)找到
+>> Node.js 版本可在[這裡](https://github.com/pardnchiu/node-jwt-auth)取得
 
 [![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE)
 [![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)

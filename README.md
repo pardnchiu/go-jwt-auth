@@ -1,7 +1,7 @@
 # JWT Auth (Golang)
 
 > A JWT authentication package providing both Access Token and Refresh Token mechanisms, featuring fingerprint recognition, Redis storage, and automatic refresh functionality.<br>
-> Node.js version can be found [here](https://github.com/pardnchiu/node-jwt-auth)
+>> version Node.js can get [here](https://github.com/pardnchiu/node-jwt-auth)
 
 [![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE)
 [![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)
