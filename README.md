@@ -287,7 +287,7 @@ r.Header.Set("Authorization", "Bearer "+token)
 
 - **Device Fingerprinting** - Generate unique fingerprints based on user agent, device ID, OS, browser, and device type
   ```go
-  fingerprint := auth.getFingerprint(w, r)
+  getFingerprint(w http.ResponseWriter, r *http.Request)
   ```
 
 - **Token Revocation** - Add tokens to blacklist on logout
@@ -327,16 +327,6 @@ r.Header.Set("Authorization", "Bearer "+token)
   - Clear cookies
   - Add token to blacklist
   - Update Redis records
-
-## Security Features
-
-- **Device Fingerprinting**: Generate unique fingerprints based on user agent, device ID, OS, browser, and device type with persistent tracking
-- **Token Revocation**: Add tokens to blacklist on logout
-- **Automatic Expiration**: Support TTL auto-cleanup for expired tokens
-- **Version Control**: Track refresh token versions to prevent replay attacks
-- **Fingerprint Verification**: Ensure tokens can only be used on the same device/browser
-- **Auto Key Generation**: Automatically generate secure ECDSA key pairs if not provided
-- **Concurrency Protection**: Redis lock mechanism prevents concurrent refresh conflicts
 
 ## Error Handling
 

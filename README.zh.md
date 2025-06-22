@@ -287,7 +287,7 @@ r.Header.Set("Authorization", "Bearer "+token)
 
 - **裝置指紋識別** - 基於用戶代理、裝置 ID、作業系統、瀏覽器和裝置類型生成唯一指紋
   ```go
-  fingerprint := auth.getFingerprint(w, r)
+  getFingerprint(w http.ResponseWriter, r *http.Request)
   ```
 
 - **權杖撤銷** - 在登出時將權杖加入黑名單
@@ -327,16 +327,6 @@ r.Header.Set("Authorization", "Bearer "+token)
   - 清除 cookies
   - 將權杖加入黑名單
   - 更新 Redis 記錄
-
-## 安全功能
-
-- **裝置指紋識別**：基於用戶代理、裝置 ID、作業系統、瀏覽器和裝置類型生成唯一指紋，具備持久追蹤功能
-- **權杖撤銷**：在登出時將權杖加入黑名單
-- **自動過期**：支援過期權杖的 TTL 自動清理
-- **版本控制**：追蹤更新權杖版本以防止重放攻擊
-- **指紋驗證**：確保權杖只能在相同裝置/瀏覽器上使用
-- **自動金鑰生成**：若未提供則自動生成安全的 ECDSA 金鑰對
-- **併發保護**：Redis 鎖定機制防止併發更新衝突
 
 ## 錯誤處理
 
