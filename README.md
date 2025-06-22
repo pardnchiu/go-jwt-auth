@@ -289,6 +289,8 @@ r.Header.Set("Authorization", "Bearer "+token)
   ```go
   getFingerprint(w http.ResponseWriter, r *http.Request)
   ```
+  - If no device ID is provided in the request, the system automatically generates a new device ID
+  - The newly generated device ID is stored in a cookie named `conn.device.id`
 
 - **Token Revocation** - Add tokens to blacklist on logout
   ```go

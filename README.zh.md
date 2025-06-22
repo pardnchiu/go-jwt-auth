@@ -289,6 +289,8 @@ r.Header.Set("Authorization", "Bearer "+token)
   ```go
   getFingerprint(w http.ResponseWriter, r *http.Request)
   ```
+  - 如果請求中沒有提供裝置 ID，系統會自動生成一個新的裝置 ID
+  - 新生成的裝置 ID 會儲存在名為 `conn.device.id` 的 Cookie 中
 
 - **權杖撤銷** - 在登出時將權杖加入黑名單
   ```go
