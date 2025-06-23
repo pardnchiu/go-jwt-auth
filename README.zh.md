@@ -1,17 +1,22 @@
 # JWT 身份驗證 (Golang)
 
-> 一個提供存取權杖和更新權杖機制的 JWT 身份驗證套件，具備指紋識別、Redis 儲存和自動更新功能。<br>
+> 一個提供存取權杖和更新權杖的 Golang JWT 身份驗證套件，具備指紋識別、Redis 儲存和自動更新功能。<br>
 >> Node.js 版本可在[這裡](https://github.com/pardnchiu/node-jwt-auth)取得
 
-[![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](LICENSE)
 [![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)
-[![readme](https://img.shields.io/badge/readme-English-blue)](https://github.com/pardnchiu/go-jwt-auth/blob/main/README.md) 
+[![readme](https://img.shields.io/badge/readme-English-blue)](README.md) 
 
 ## 三大主軸
 
-- **雙權杖系統**：Access Token 搭配 Refresh ID 具備自動更新機制
-- **裝置指紋識別**：基於 `User-Agent`、`Device ID`、作業系統和瀏覽器生成唯一指紋，防止權杖在不同裝置間濫用
-- **安全防護**：權杖撤銷、版本控制、智能更新，以及使用 Redis 鎖定機制的併發保護
+### 雙權杖系統
+Access Token 搭配 Refresh ID，並具備自動更新機制
+
+### 裝置指紋識別
+基於 `User-Agent`、`Device ID`、作業系統和瀏覽器生成唯一指紋，防止權杖在不同裝置間濫用
+
+### 安全防護
+權杖撤銷、版本控制、智能更新，以及使用 Redis 鎖定機制的併發保護
 
 ## 流程圖
 
@@ -68,7 +73,7 @@ flowchart TD
 
 </details>
 
-## 相依套件
+## 依賴套件
 
 - [`github.com/gin-gonic/gin`](https://github.com/gin-gonic/gin)
 - [`github.com/golang-jwt/jwt/v5`](https://github.com/golang-jwt/jwt/v5)
@@ -91,25 +96,24 @@ import (
   "net/http"
   
   "github.com/gin-gonic/gin"
-  jwtAuth "github.com/pardnchiu/go-jwt-auth"
+  ja "github.com/pardnchiu/go-jwt-auth"
 )
 
 func main() {
-  // 最小配置 - 金鑰將自動生成
-  config := jwtAuth.Config{
-    Redis: jwtAuth.Redis{
+  config := ja.Config{
+    Redis: ja.Redis{
       Host:     "localhost",
       Port:     6379,
       Password: "password",
       DB:       0,
     },
-    CheckAuth: func(userData jwtAuth.Auth) (bool, error) {
+    CheckAuth: func(userData ja.Auth) (bool, error) {
       // 自定義用戶驗證邏輯
       return userData.ID != "", nil
     },
   }
 
-  auth, err := jwtAuth.New(config)
+  auth, err := ja.New(config)
   if err != nil {
     log.Fatal("初始化失敗:", err)
   }
@@ -120,7 +124,7 @@ func main() {
   // 登入端點
   r.POST("/login", func(c *gin.Context) {
     // 驗證登入憑證後...
-    user := &jwtAuth.Auth{
+    user := &ja.Auth{
       ID:    "user123",
       Name:  "John Doe",
       Email: "john@example.com",
@@ -140,17 +144,17 @@ func main() {
     })
   })
 
-  // 受保護的路由
+  // 受保護
   protected := r.Group("/api")
   protected.Use(auth.GinMiddleware())
   {
     protected.GET("/profile", func(c *gin.Context) {
-      user, _ := jwtAuth.GetAuthDataFromGinContext(c)
+      user, _ := ja.GetAuthDataFromGinContext(c)
       c.JSON(http.StatusOK, gin.H{"user": user})
     })
   }
 
-  // 登出端點
+  // 登出
   r.POST("/logout", func(c *gin.Context) {
     result := auth.Revoke(c.Writer, c.Request)
     if !result.Success {
@@ -216,60 +220,13 @@ type Cookie struct {
 }
 ```
 
-## 支援的操作
+## 可用函式
 
-### 核心方法
-
-```go
-// 建立新的身份驗證會話
-result := auth.Create(w, r, userData)
-
-// 驗證身份驗證狀態
-result := auth.Verify(w, r)
-
-// 撤銷身份驗證（登出）
-result := auth.Revoke(w, r)
-```
-
-### 中介軟體使用
-
-```go
-// Gin 框架中介軟體
-protected.Use(auth.GinMiddleware())
-
-// 標準 HTTP 中介軟體
-server := &http.Server{
-  Handler: auth.HTTPMiddleware(handler),
-}
-
-// 從上下文獲取用戶資料
-user, exists := jwtAuth.GetAuthDataFromGinContext(c)
-user, exists := jwtAuth.GetAuthDataFromHTTPRequest(r)
-```
-
-### 驗證方法
-
-```go
-// 支援多種驗證方法：
-// 1. 自定義標頭
-r.Header.Set("X-Device-FP", fingerprint)
-r.Header.Set("X-Refresh-ID", refreshID)
-r.Header.Set("Authorization", "Bearer "+token)
-
-// 2. Cookies（自動管理）
-// access_token、refresh_id cookies
-
-// 3. 裝置指紋識別（自動）
-// 基於用戶代理、裝置 ID、作業系統、瀏覽器
-```
-
-## 核心功能
-
-### 連線管理
+### 實例管理
 
 - **New** - 建立新的 JWT 身份驗證實例
   ```go
-  auth, err := jwtAuth.New(config)
+  auth, err := ja.New(config)
   ```
   - 初始化 Redis 連線
   - 設定日誌系統
@@ -283,27 +240,7 @@ r.Header.Set("Authorization", "Bearer "+token)
   - 關閉 Redis 連線
   - 釋放系統資源
 
-### 安全功能
-
-- **裝置指紋識別** - 基於用戶代理、裝置 ID、作業系統、瀏覽器和裝置類型生成唯一指紋
-  ```go
-  getFingerprint(w http.ResponseWriter, r *http.Request)
-  ```
-  - 如果請求中沒有提供裝置 ID，系統會自動生成一個新的裝置 ID
-  - 新生成的裝置 ID 會儲存在名為 `conn.device.id` 的 Cookie 中
-
-- **權杖撤銷** - 在登出時將權杖加入黑名單
-  ```go
-  result := auth.Revoke(w, r)
-  ```
-
-- **自動更新** - 基於過期時間和版本控制的智能權杖更新
-  ```go
-  // 在需要時於 Verify() 期間自動觸發
-  result := auth.Verify(w, r)
-  ```
-
-### 身份驗證流程
+### JWT 管理
 
 - **Create** - 生成新的身份驗證會話
   ```go
@@ -329,6 +266,39 @@ r.Header.Set("Authorization", "Bearer "+token)
   - 清除 cookies
   - 將權杖加入黑名單
   - 更新 Redis 記錄
+
+### 中間件
+
+```go
+// Gin 框架中介軟體
+protected.Use(auth.GinMiddleware())
+
+// 標準 HTTP 中介軟體
+server := &http.Server{
+  Handler: auth.HTTPMiddleware(handler),
+}
+
+// 從上下文獲取用戶資料
+user, exists := ja.GetAuthDataFromGinContext(c)
+user, exists := ja.GetAuthDataFromHTTPRequest(r)
+```
+
+### 支持多種驗證方法
+
+```go
+// 支援多種驗證方法：
+// 1. 自定義標頭
+r.Header.Set("X-Device-FP", fingerprint)
+r.Header.Set("X-Refresh-ID", refreshID)
+r.Header.Set("Authorization", "Bearer "+token)
+
+// 2. Cookies（自動管理）
+// access_token、refresh_id cookies
+
+// 3. 裝置指紋識別（自動）
+// 基於用戶代理、裝置 ID、作業系統、瀏覽器
+```
+
 
 ## 錯誤處理
 
@@ -359,7 +329,7 @@ type JWTAuthResult struct {
 
 ## 授權條款
 
-此原始碼專案採用 [MIT](https://github.com/pardnchiu/go-jwt-auth/blob/main/LICENSE) 授權條款。
+此原始碼專案採用 [MIT](LICENSE) 授權條款。
 
 ## 作者
 
