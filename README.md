@@ -8,7 +8,7 @@
 
 [![license](https://img.shields.io/github/license/pardnchiu/go-jwt-auth)](LICENSE)
 [![version](https://img.shields.io/github/v/tag/pardnchiu/go-jwt-auth)](https://github.com/pardnchiu/go-jwt-auth/releases)
-[![readme](https://img.shields.io/badge/readme-繁體中文-blue)](README.md.md) 
+[![readme](https://img.shields.io/badge/readme-中文-blue)](README.zh.md) 
 
 ## Three Core Features
 
